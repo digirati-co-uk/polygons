@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@atlas-viewer/atlas": "^2.0.0-alpha.21",
+    "@iiif/helpers": "^1.0.2",
     "next": "^13.4.19",
+    "polygons-core": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ui": "workspace:*"
