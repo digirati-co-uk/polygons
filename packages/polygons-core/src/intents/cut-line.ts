@@ -3,8 +3,11 @@ import { splitLine } from './split-line';
 
 export const cutLine: ActionIntent = {
   type: 'cut-line',
-  label: 'Cut line',
+  label: 'Add new point',
   trigger: { type: 'click' },
+  modifiers: {
+    Shift: 'Cut line',
+  },
   isValid(pointers, state, modifiers) {
     return splitLine.isValid(pointers, state, modifiers);
   },
@@ -28,7 +31,6 @@ export const cutLine: ActionIntent = {
           hasSplit = true;
         }
       }
-      console.log('did split??');
       return {
         isOpen: true,
         points: [...afterPoints, ...beforePoints],

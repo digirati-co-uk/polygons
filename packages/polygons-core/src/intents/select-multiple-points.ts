@@ -28,6 +28,10 @@ export const selectMultiplePoints: TransitionIntent = {
     if (state.selectionBox) {
       const pointsInsideIdx: number[] = [];
 
+      if (modifiers.Shift) {
+        pointsInsideIdx.push(...state.selectedPoints);
+      }
+
       for (let i = 0; i < state.polygon.points.length; i++) {
         const point = state.polygon.points[i];
         if (

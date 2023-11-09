@@ -5,10 +5,13 @@ export const splitLine: TransitionIntent = {
   type: 'split-line',
   label: 'Split line',
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
+    if (modifiers.Meta) {
+      return false;
+    }
     // if (!state.isOpen) return false;
 
     // Are we within X pixels of a line
-    if (state.closestLinePoint && state.closestLineDistance < 20) {
+    if (state.closestLinePoint && state.closestLineDistance < modifiers.proximity) {
       return true;
     }
 

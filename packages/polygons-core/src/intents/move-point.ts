@@ -1,8 +1,6 @@
 import { Modifiers, RenderState, TransitionIntent } from '../types';
 import { closestVertex, Point } from '../polygon';
 
-const threshold = 10;
-
 export const movePoint: TransitionIntent = {
   type: 'move-point',
   label: 'Move point',
@@ -11,6 +9,8 @@ export const movePoint: TransitionIntent = {
     // if (state.selectedPoints.length === 0) {
     //   return false;
     // }
+
+    const threshold = modifiers.proximity * 0.7;
 
     const [x, y] = pointers[0];
     const points = state.polygon.points;

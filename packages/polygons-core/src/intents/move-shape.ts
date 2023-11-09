@@ -5,6 +5,9 @@ export const moveShape: TransitionIntent = {
   type: 'move-shape',
   label: 'Move shape',
   isValid(pointers, state, modifiers) {
+    if (modifiers.Shift) {
+      return false;
+    }
     // Does the point intersect with the shape?
     const [x, y] = pointers[0];
     const points = state.polygon.points;

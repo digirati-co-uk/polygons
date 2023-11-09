@@ -18,12 +18,12 @@ export const closeShape: ActionIntent = {
     if (selected === 0) {
       const lastPoint = state.polygon.points[state.polygon.points.length - 1];
       const dist = distance(pointers[0], lastPoint);
-      return dist < 10;
+      return dist < modifiers.proximity;
     }
     if (selected === state.polygon.points.length - 1) {
       const firstPoint = state.polygon.points[0];
       const dist = distance(pointers[0], firstPoint);
-      return dist < 10;
+      return dist < modifiers.proximity;
     }
 
     return false;

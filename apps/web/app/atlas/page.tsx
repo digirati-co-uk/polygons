@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useReducer, useRef } from 'react';
+import {useEffect, useReducer, useRef, useState} from 'react';
 import { AtlasAuto, HTMLPortal, ImageService, Runtime } from '@atlas-viewer/atlas';
 import { Vault } from '@iiif/helpers';
 import { createSvgHelpers, RenderState, SlowState } from 'polygons-core';
@@ -26,7 +26,7 @@ const initial =
 
 export default function AtlasPage() {
   const tileIndex = 0;
-  const runtime = useRef<Runtime>();
+  const [runtime, setRuntime] = useState<Runtime | undefined>();
   const image = images[tileIndex];
 
   // SVG STUFF
@@ -112,11 +112,21 @@ export default function AtlasPage() {
   };
   const Shape = currentShape ? (currentShape.open ? 'polyline' : 'polygon') : null;
 
+  useEffect(() => {
+    return runtime?.world.addLayoutSubscriber((ev, data) => {
+      if (ev === 'event-activation' || ev === 'zoom-to' || ev === 'go-home') {
+        if (runtime._lastGoodScale && !Number.isNaN(runtime._lastGoodScale)) {
+          helper.setScale(1/runtime._lastGoodScale);
+        }
+      }
+    })
+  }, [runtime]);
+
   return (
     <div onKeyDown={(e) => helper.key.down(e.key)} onKeyUp={(e) => helper.key.up(e.key)}>
       <AtlasAuto
         onCreated={(rt) => {
-          runtime.current = rt.runtime;
+          setRuntime(rt.runtime);
         }}
         // runtimeOptions={{ maxOverZoom: scale / 100 }}
         mode={currentShape ? 'sketch' : 'explore'}
@@ -279,9 +289,10 @@ export default function AtlasPage() {
         </world>
       </AtlasAuto>
       <button onClick={addShape}>Add shape</button>
-      <div>Transition intent: {state.transitionIntentType}</div>
-      <pre>{JSON.stringify({ currentShape }, null, 2)}</pre>
+      <div>Transition intent: {helper.label(state.transitionIntentType)}</div>
+      <div>Action intent: {helper.label(state.actionIntentType)}</div>
       <pre>{JSON.stringify(state, null, 2)}</pre>
+      <pre>{JSON.stringify({ currentShape }, null, 2)}</pre>
     </div>
   );
 }

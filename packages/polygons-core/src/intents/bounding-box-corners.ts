@@ -13,8 +13,8 @@ export const boundingBoxCorners: TransitionIntent = {
     if (!state.polygon.boundingBox) return false;
 
     // Config
-    const margin = 5;
-    const proximiy = modifiers.Meta ? 30 : 15;
+    const margin = modifiers.proximity * 0.5;
+    const proximiy = modifiers.Meta ? modifiers.proximity * 2 : modifiers.proximity;
 
     // Types
     // - Scale from opposite corner

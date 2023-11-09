@@ -46,7 +46,7 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
 
       if (bb.rotation) {
         el.style.transformOrigin = `${bb.x + bb.width / 2}px ${bb.y + bb.height / 2}px`;
-        el.style.transform = `rotate(${Math.round(bb.rotation * (180 / Math.PI))}deg)`;
+        el.style.transform = `rotate(${Math.round(100 * bb.rotation * (180 / Math.PI))/100}deg)`;
       } else {
         el.style.transform = '';
       }

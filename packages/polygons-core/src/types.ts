@@ -20,6 +20,8 @@ export interface RenderState {
 export interface SlowState {
   actionIntentType: null | string;
   transitionIntentType: null | string;
+  validIntentKeys: Record<string, string>;
+  currentModifiers: Record<string, string>;
   transitioning: boolean;
   hasClosestLine: boolean;
   selectedPoints: number[];
@@ -28,9 +30,12 @@ export interface SlowState {
 }
 
 export type Modifiers = {
+  // Keys
   Shift: boolean;
   Alt: boolean;
   Meta: boolean;
+  // Proximity
+  proximity: number;
 };
 
 export type SetState = (state: SlowState | ((prev: SlowState) => SlowState)) => void;
@@ -40,6 +45,7 @@ export type RenderFunc = (state: RenderState, slowState: SlowState, dt: number) 
 export interface TransitionIntent {
   type: string;
   label: string;
+  modifiers?: Record<string, string>;
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean;
   start?(
     pointers: Point[],
@@ -60,6 +66,7 @@ export interface ActionIntent {
   type: string;
   label: string;
   trigger: { type: 'click' } | { type: 'key'; key: string };
+  modifiers?: Record<string, string>;
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean;
   commit(
     pointers: Point[],

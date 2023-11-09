@@ -16,6 +16,7 @@ import { cutLine } from './intents/cut-line';
 import { selectMultiplePoints } from './intents/select-multiple-points';
 import { deselectPoints } from './intents/deselect-points';
 import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
+import {deletePoint} from './intents/delete-point';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -83,7 +84,22 @@ const keyIntents = [
   nudgeLeft,
   nudgeUp,
   nudgeDown,
+  deletePoint,
 ];
+
+
+const intentMap: Record<string, ActionIntent | TransitionIntent>  = {};
+transitionIntents.forEach(i => {
+  intentMap[i.type] = i;
+})
+actionIntents.forEach(i => {
+  intentMap[i.type] = i;
+})
+keyIntents.forEach(i => {
+  intentMap[i.type] = i;
+})
+
+const BASE_PROXIMITY = 20;
 
 export function createHelper(input: CreateHelperInput, onSave: (input: CreateHelperInput) => void) {
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -121,8 +137,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       Alt: false,
       Shift: false,
       Meta: false,
+      proximity: BASE_PROXIMITY, // default value.
     },
     showBoundingBox: false,
+    currentModifiers: {},
+    validIntentKeys: {},
   };
 
   // This is state held internally to the helper.
@@ -148,6 +167,33 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   // Internal set slow state function.
   function setState(state: Partial<SlowState>) {
+    const keys = Object.keys(state);
+    if (keys.length === 0) return;
+    const readOnlySlowState = internals.nextSlowState || slowState;
+
+    // Optimise validIntentKeys
+    if (keys.length === 1 && keys[0] === 'validIntentKeys' && readOnlySlowState.validIntentKeys) {
+      const keysA = Object.keys(readOnlySlowState.validIntentKeys);
+      const keysB = Object.keys(state.validIntentKeys || {});
+      let change = false;
+      if (keysA.length === keysB.length) {
+        for (const key of keysA) {
+          if (readOnlySlowState.validIntentKeys[key] !== (state.validIntentKeys as any)[key]) {
+            change = true;
+          }
+        }
+        if (!change) {
+          return;
+        }
+      }
+    }
+
+    if (keys.includes('hasClosestLine')) {
+      if (state.hasClosestLine === readOnlySlowState.hasClosestLine) {
+        return;
+      }
+    }
+
     if (internals.nextSlowState) {
       internals.nextSlowState = { ...internals.nextSlowState, ...state };
       return;
@@ -212,11 +258,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   function updateBoundingBoxVisibility() {
     if (slowState.showBoundingBox) {
-      if (state.selectedPoints.length !== state.polygon.points.length) {
+      if (state.selectedPoints.length === 0 || state.selectedPoints.length !== state.polygon.points.length) {
         setState({ showBoundingBox: false });
       }
     } else {
-      if (state.selectedPoints.length === state.polygon.points.length) {
+      if (state.polygon.points.length && state.selectedPoints.length === state.polygon.points.length) {
         setState({ showBoundingBox: true });
       }
     }
@@ -228,7 +274,10 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, state.pointer);
 
     // Distance is squared.
-    if (distance < 1000 && (!state.isOpen || state.polygon.points.length - 1 !== prevIdx)) {
+
+    const proximityDistance = getProximity() * getProximity();
+
+    if (distance < proximityDistance && (!state.isOpen || state.polygon.points.length - 1 !== prevIdx)) {
       state.closestLinePoint = intersection;
       state.closestLineDistance = Math.sqrt(distance);
       state.closestLineIndex = prevIdx;
@@ -293,6 +342,15 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         setState({ actionIntentType: null });
       }
     }
+
+    const keyMap: Record<string, string> = {};
+    for (let i = 0; i < keyIntents.length; i++) {
+      const intent = keyIntents[i];
+      if (intent.trigger.type === 'key' && validate(intent)) {
+        keyMap[intent.trigger.key] = intent.label;
+      }
+    }
+    setState({ validIntentKeys: keyMap  });
   }
 
   function calculateLine() {
@@ -400,6 +458,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // to be taken into consideration as the world may be scaled.
   function setScale(scale: number) {
     state.scale = scale;
+    setState({ modifiers: { ...(internals.nextSlowState?.modifiers || slowState.modifiers), proximity: scale * BASE_PROXIMITY }, })
+  }
+
+  function getProximity() {
+    return BASE_PROXIMITY * state.scale;
   }
 
   // Clock
@@ -442,6 +505,10 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     const pointerA = pointers[0];
 
     if (!pointerA || (!pointerA[0] && pointerA[0] !== 0) || (!pointerA[1] && pointerA[1] !== 0)) {
+      return;
+    }
+
+    if (Number.isNaN(pointerA[0]) || Number.isNaN(pointerA[1])) {
       return;
     }
 
@@ -560,9 +627,32 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         Alt: false,
         Shift: false,
         Meta: false,
+        proximity: BASE_PROXIMITY,
       },
       showBoundingBox: false,
+      currentModifiers: {},
+      validIntentKeys: {},
     });
+  }
+
+  function label(type: string) {
+    if (!type) return '';
+    const intent = intentMap[type];
+    if (!intent || !intent.modifiers) {
+      return intent.label || '';
+    }
+
+    if (slowState.modifiers.Shift && intent.modifiers.Shift) {
+      return intent.modifiers.Shift;
+    }
+    if (slowState.modifiers.Alt && intent.modifiers.Alt) {
+      return intent.modifiers.Alt;
+    }
+    if (slowState.modifiers.Meta && intent.modifiers.Meta) {
+      return intent.modifiers.Meta;
+    }
+
+    return intent.label;
   }
 
   return {
@@ -576,6 +666,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     pointerDown,
     pointerUp,
     setShape,
+    label,
   };
 }
 

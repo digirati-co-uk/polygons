@@ -1,5 +1,6 @@
 import { ActionIntent, Modifiers, RenderState } from '../types';
 import { Point } from '../polygon';
+import {selectMultiplePoints} from './select-multiple-points';
 
 const threshold = 10;
 
@@ -48,7 +49,13 @@ export const selectPoint: ActionIntent = {
       .sort((a, b) => a[0] - b[0]);
 
     const closestPoint = pointDistances[0];
-    selectedPoints.push(closestPoint[1]);
+
+    if (!selectedPoints.includes(closestPoint[1])) {
+      selectedPoints.push(closestPoint[1]);
+    } else if (modifiers.Shift) {
+      return { selectedPoints: selectedPoints.filter(i => i !== closestPoint[1]) }
+    }
+
     return { selectedPoints };
   },
 };
