@@ -14,6 +14,10 @@ export const closeShape: ActionIntent = {
       return false;
     }
 
+    if (modifiers.Meta) {
+      return false;
+    }
+
     const selected = state.selectedPoints[0];
     if (selected === 0) {
       const lastPoint = state.polygon.points[state.polygon.points.length - 1];
