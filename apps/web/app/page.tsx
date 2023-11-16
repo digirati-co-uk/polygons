@@ -171,6 +171,7 @@ export default function MainPage() {
           {shapes.map((shape, idx) => {
             return (
               <li
+                key={shape.id || idx}
                 className={`list-item ${idx === selectedShape ? 'list-item--selected' : ''}`}
                 onClick={() => changeShape(idx)}
               >

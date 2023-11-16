@@ -20,6 +20,7 @@ export function shapeReducer(state: ShapeState, action: ShapeActions): ShapeStat
         shapes: [
           ...state.shapes,
           {
+            id: `shape-${Math.round(Math.random() * 1000000)}`,
             points: [],
             open: true,
           },

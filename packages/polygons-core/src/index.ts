@@ -27,6 +27,7 @@ const cancelAnimationFrame =
   typeof window !== 'undefined' ? window.cancelAnimationFrame : (id: any) => clearTimeout(id);
 
 interface CreateHelperInput {
+  id?: string;
   open: boolean;
   points: Array<Point>;
 }
@@ -109,9 +110,11 @@ keyIntents.forEach((i) => {
 
 const BASE_PROXIMITY = 20;
 
-export function createHelper(input: CreateHelperInput, onSave: (input: CreateHelperInput) => void) {
+export function createHelper(input: CreateHelperInput | null, onSave: (input: CreateHelperInput) => void) {
   // This state will not change frequently.
   const slowState: SlowState = {
+    shapeId: input?.id || null,
+    noShape: input === null,
     transitioning: false,
     actionIntentType: null,
     transitionIntentType: null,
@@ -190,11 +193,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     if (keys.length === 0) return;
     const readOnlySlowState = internals.nextSlowState || state.slowState;
 
+    let change = false;
     // Optimise validIntentKeys
     if (keys.length === 1 && keys[0] === 'validIntentKeys' && readOnlySlowState.validIntentKeys) {
       const keysA = Object.keys(readOnlySlowState.validIntentKeys);
       const keysB = Object.keys(newState.validIntentKeys || {});
-      let change = false;
       if (keysA.length === keysB.length) {
         for (const key of keysA) {
           if (readOnlySlowState.validIntentKeys[key] !== (newState.validIntentKeys as any)[key]) {
@@ -207,7 +210,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       }
     }
 
-    if (keys.includes('hasClosestLine')) {
+    if (keys.length === 1 && keys.includes('hasClosestLine')) {
       if (newState.hasClosestLine === readOnlySlowState.hasClosestLine) {
         return;
       }
@@ -249,6 +252,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   function flushSetState() {
     if (internals.shouldUpdate) {
       onSave({
+        id: state.slowState.shapeId || undefined,
         open: state.isOpen,
         points: state.polygon.points,
       });
@@ -279,11 +283,19 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   function updateBoundingBoxVisibility() {
     if (state.slowState.showBoundingBox) {
-      if (state.selectedPoints.length === 0 || state.selectedPoints.length !== state.polygon.points.length) {
+      if (
+        state.slowState.noShape ||
+        state.selectedPoints.length === 0 ||
+        state.selectedPoints.length !== state.polygon.points.length
+      ) {
         setState({ showBoundingBox: false });
       }
     } else {
-      if (state.polygon.points.length && state.selectedPoints.length === state.polygon.points.length) {
+      if (
+        !state.slowState.noShape &&
+        state.polygon.points.length &&
+        state.selectedPoints.length === state.polygon.points.length
+      ) {
         setState({ showBoundingBox: true });
       }
     }
@@ -294,6 +306,8 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     setState({ selectedPoints: resp.selectedPoints });
 
     state.polygon.points = resp.points;
+    state.polygon.boundingBox = null;
+    state.polygon.iedges = null;
     precalculate(state.polygon);
     updateBoundingBox(state.polygon);
     internals.shouldUpdate = true;
@@ -332,7 +346,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   }
 
   function updateShapeIntersection() {
-    if (!state.pointer) {
+    if (!state.pointer || state.slowState.noShape) {
       setState({ pointerInsideShape: false });
       return;
     }
@@ -369,7 +383,13 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   }
 
   function updateClosestPoint() {
-    if (!state.pointer || state.slowState.transitioning || !state.polygon.points || state.polygon.points.length === 0)
+    if (
+      state.slowState.noShape ||
+      !state.pointer ||
+      state.slowState.transitioning ||
+      !state.polygon.points ||
+      state.polygon.points.length === 0
+    )
       return;
 
     const [x, y] = state.pointer;
@@ -388,6 +408,13 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   function updateClosestIntersection() {
     if (!state.pointer || state.slowState.transitioning) return;
+
+    if (state.slowState.noShape) {
+      state.closestLineIndex = -1;
+      state.closestLinePoint = null;
+      state.closestLineDistance = 0;
+      return;
+    }
 
     const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, state.pointer);
 
@@ -411,6 +438,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   function updateCurrentIntent() {
     if (!state.pointer) return;
     if (state.slowState.transitioning) return;
+    if (state.slowState.noShape) return;
 
     // Do some calculations for the intents to use, and also to update the pending UI.
     let didSetTransition = false;
@@ -473,7 +501,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   function calculateLine() {
     const pointer = state.pointer;
-    if (!pointer || !isDrawing()) return;
+    if (!pointer || !isDrawing() || state.slowState.noShape) return;
 
     const point = state.selectedPoints[0];
     state.line = [state.polygon.points[point], pointer];
@@ -539,6 +567,9 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       }
       if (resp.points) {
         state.polygon.points = resp.points;
+        state.polygon.boundingBox = null;
+        state.polygon.iedges = null;
+        state.transitionBoundingBox = null;
         precalculate(state.polygon);
         updateBoundingBox(state.polygon);
         internals.shouldUpdate = true;
@@ -819,6 +850,8 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
               }
               if (resp.points) {
                 state.polygon.points = resp.points;
+                state.polygon.boundingBox = null;
+                state.polygon.iedges = null;
                 precalculate(state.polygon);
                 updateBoundingBox(state.polygon);
                 internals.shouldUpdate = true;
@@ -896,9 +929,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   }
 
   // setShape
-  function setShape(shape: InputShape) {
-    state.polygon.points = shape.points;
-    state.isOpen = shape.open;
+  function setShape(shape: InputShape | null) {
+    state.polygon.points = shape?.points || [];
+    state.polygon.boundingBox = null;
+    state.polygon.iedges = null;
+    state.isOpen = shape?.open || false;
     precalculate(state.polygon);
     updateBoundingBox(state.polygon);
     internals.nextSlowState = null;
@@ -910,6 +945,8 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     }
     // Reset
     setState({
+      noShape: shape === null,
+      shapeId: shape?.id || null,
       transitioning: false,
       actionIntentType: null,
       transitionIntentType: null,
@@ -919,7 +956,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         Alt: false,
         Shift: false,
         Meta: false,
-        proximity: BASE_PROXIMITY,
+        proximity: state.slowState.modifiers.proximity,
       },
       showBoundingBox: false,
       currentModifiers: {},

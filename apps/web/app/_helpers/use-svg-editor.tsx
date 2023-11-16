@@ -13,7 +13,6 @@ interface SvgEditorOptions {
 
 export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
   const { image, currentShape, onChange } = options;
-
   const boundingBox = useRef<any>();
   const transitionBoundingBox = useRef<any>();
   const selectBox = useRef<any>();
@@ -40,9 +39,7 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
   );
 
   useEffect(() => {
-    if (currentShape) {
-      helper.setShape(currentShape);
-    }
+    helper.setShape(currentShape || null);
   }, deps);
 
   useEffect(() => {

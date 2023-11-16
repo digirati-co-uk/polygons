@@ -21,6 +21,8 @@ export interface RenderState {
 }
 
 export interface SlowState {
+  shapeId: undefined | string | null;
+  noShape: boolean;
   actionIntentType: null | string;
   transitionIntentType: null | string;
   validIntentKeys: Record<string, string>;
