@@ -2,8 +2,11 @@ import { TransitionIntent } from '../types';
 
 export const selectMultiplePoints: TransitionIntent = {
   type: 'select-multiple-points',
-  label: 'Select multiple points',
+  label: 'Drag to select multiple points',
   isValid(pointers, state, modifiers) {
+    if (state.isOpen && state.line) {
+      return false;
+    }
     return true;
   },
   transition(pointers, state, modifiers) {

@@ -19,7 +19,7 @@ export const deletePoint: ActionIntent = {
     });
 
     return {
-      isOpen: newPoints.length === 0,
+      isOpen: newPoints.length < 3,
       selectedPoints: [],
       points: newPoints,
     };

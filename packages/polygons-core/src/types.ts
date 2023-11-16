@@ -9,12 +9,15 @@ export interface RenderState {
   line: null | [Point, Point];
   transitionOrigin: null | Point;
   transitionBoundingBox: null | { x: number; y: number; width: number; height: number; rotation?: number };
+  transitionRotate: boolean;
   selectionBox: null | { x: number; y: number; width: number; height: number };
   pointer: null | Point;
   closestLinePoint: null | Point;
   closestLineDistance: number;
   closestLineIndex: number;
   transitionDirection: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
+  slowState: SlowState;
+  transitionDraw: Point[];
 }
 
 export interface SlowState {
@@ -27,7 +30,17 @@ export interface SlowState {
   selectedPoints: number[];
   modifiers: Modifiers;
   showBoundingBox: boolean;
+  pointerInsideShape: boolean;
+  closestPoint: null | number;
+  transitionModifiers: Record<string, string> | null;
+  selectedStamp: null | InputShape;
 }
+
+export type InputShape = {
+  id?: string;
+  points: Point[];
+  open: boolean;
+};
 
 export type Modifiers = {
   // Keys
@@ -52,6 +65,8 @@ export interface TransitionIntent {
     state: RenderState,
     modifiers: Modifiers
   ): {
+    isOpen?: boolean;
+    points?: Point[];
     selectedPoints?: number[];
   } | void;
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers): void;

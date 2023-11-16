@@ -4,8 +4,15 @@ import { Point, Polygon, updateBoundingBox } from '../polygon';
 
 export const boundingBoxCorners: TransitionIntent = {
   type: 'bounding-box-corners',
-  label: 'Bounding box corners',
+  label: 'Drag to resize',
+  modifiers: {
+    Shift: 'Maintain aspect ratio',
+    Alt: 'Scale from center',
+    Meta: 'Rotate',
+  },
   isValid(pointers, state, modifiers) {
+    state.transitionDirection = null;
+    state.transitionRotate = false;
     // Currently not supported.
     if (state.isOpen) return false;
     // No bounding box.
@@ -14,7 +21,10 @@ export const boundingBoxCorners: TransitionIntent = {
 
     // Config
     const margin = modifiers.proximity * 0.5;
-    const proximiy = modifiers.Meta ? modifiers.proximity * 2 : modifiers.proximity;
+
+    // This is when the modifier key is used.
+    // const proximity = modifiers.Meta ? modifiers.proximity * 2 : modifiers.proximity;
+    const proximity = modifiers.proximity * 3;
 
     // Types
     // - Scale from opposite corner
@@ -40,16 +50,24 @@ export const boundingBoxCorners: TransitionIntent = {
     const northEast: Point = [box.x + box.width, box.y];
     const soutWest: Point = [box.x, box.y + box.height];
 
-    if (
-      distance(pointers[0], southEast) < proximiy ||
-      distance(pointers[0], northWest) < proximiy ||
-      distance(pointers[0], northEast) < proximiy ||
-      distance(pointers[0], soutWest) < proximiy
-    ) {
+    const choice = ['ne', 'nw', 'se', 'sw'];
+    const distances = [
+      distance(pointers[0], northEast),
+      distance(pointers[0], northWest),
+      distance(pointers[0], southEast),
+      distance(pointers[0], soutWest),
+    ];
+    const minDistance = Math.min(...distances);
+    if (distances[0] < proximity || distances[1] < proximity || distances[2] < proximity || distances[3] < proximity) {
+      if (minDistance > modifiers.proximity || modifiers.Meta) {
+        state.transitionRotate = true;
+      }
+      const index = distances.indexOf(Math.min(...distances));
+      state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
+
       return true;
     }
 
-    // @todo
     return false;
   },
   start(pointers: Point[], state: RenderState, modifiers: Modifiers): { selectedPoints?: number[] } | void {
@@ -67,8 +85,15 @@ export const boundingBoxCorners: TransitionIntent = {
       distance(pointers[0], southEast),
       distance(pointers[0], soutWest),
     ];
-    const index = distances.indexOf(Math.min(...distances));
+
+    const minDistance = Math.min(...distances);
+
+    const index = distances.indexOf(minDistance);
     state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
+
+    if (minDistance > modifiers.proximity) {
+      state.transitionRotate = true;
+    }
   },
   transition(pointers, state, modifiers) {
     // Start with transform, scaling points from the origin.
@@ -77,7 +102,7 @@ export const boundingBoxCorners: TransitionIntent = {
     const start = state.transitionOrigin || pointers[0];
     const [x, y] = pointers[0];
 
-    if (modifiers.Meta) {
+    if (modifiers.Meta || state.transitionRotate) {
       origin = [box.x + box.width / 2, box.y + box.height / 2];
       // Rotation.
       const startAngle = Math.atan2(start[1] - origin[1], start[0] - origin[0]);
@@ -152,7 +177,7 @@ export const boundingBoxCorners: TransitionIntent = {
     if (modifiers.Shift) {
       // Maintain aspect ratio.
       const aspect = box.width / box.height;
-      if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {
         dy = dx / aspect;
       } else {
         dx = dy * aspect;
@@ -189,6 +214,7 @@ export const boundingBoxCorners: TransitionIntent = {
 
     state.transitionPoints = null;
     state.transitionBoundingBox = null;
+    state.transitionRotate = false;
 
     return {
       points,

@@ -1,4 +1,8 @@
 module.exports = {
   reactStrictMode: true,
-  transpilePackages: ["ui"],
+  transpilePackages: ['ui'],
+  output: 'export',
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };

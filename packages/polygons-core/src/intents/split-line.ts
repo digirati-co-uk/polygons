@@ -15,6 +15,14 @@ export const splitLine: TransitionIntent = {
       return true;
     }
 
+    // @todo come back to this.
+    // const beforeIndex = state.closestLineIndex;
+    // const afterIndex = ((state.closestLineIndex + 2) % state.polygon.points.length) - 1;
+    //
+    // if (state.selectedPoints.includes(beforeIndex) && state.selectedPoints.includes(afterIndex)) {
+    //   return false;
+    // }
+
     return false;
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {

@@ -1,4 +1,5 @@
 import { RenderState, SlowState } from './types';
+import { simplifyPolygon } from './math';
 
 interface SvgHelpersOptions {
   proximityThreshold?: number;
@@ -46,7 +47,7 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
 
       if (bb.rotation) {
         el.style.transformOrigin = `${bb.x + bb.width / 2}px ${bb.y + bb.height / 2}px`;
-        el.style.transform = `rotate(${Math.round(100 * bb.rotation * (180 / Math.PI))/100}deg)`;
+        el.style.transform = `rotate(${Math.round(100 * bb.rotation * (180 / Math.PI)) / 100}deg)`;
       } else {
         el.style.transform = '';
       }
@@ -124,13 +125,35 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
       if (slowState.actionIntentType === 'close-shape') {
         const firstPoint = state.polygon.points[0];
         const lastPoint = state.polygon.points[state.polygon.points.length - 1];
-        el.setAttribute('points', `${firstPoint.join(',')} ${lastPoint.join(',')}`);
+        if (firstPoint && lastPoint) {
+          el.setAttribute('points', `${firstPoint.join(',')} ${lastPoint.join(',')}`);
+        }
       } else {
-        el.setAttribute(
-          'points',
-          `${state.pointer[0]},${state.pointer[1]} ${state.polygon.points[state.selectedPoints[0]].join(',')}`
-        );
+        if (state.line) {
+          el.setAttribute('points', `${state.line[0].join(',')} ${state.line[1].join(',')}`);
+        } else {
+          const first = state.polygon.points[state.selectedPoints[0]];
+          if (first && first.length) {
+            el.setAttribute('points', `${state.pointer[0]},${state.pointer[1]} ${first.join(',')}`);
+          }
+        }
       }
+    }
+  }
+
+  function updateDrawPreview(
+    el: SVGElement | undefined | null,
+    state: RenderState,
+    slowState: SlowState,
+    tolerance = 3
+  ) {
+    if (el && state.transitionDraw.length) {
+      el.setAttribute(
+        'points',
+        simplifyPolygon(state.transitionDraw, tolerance * 3)
+          .map((p) => p.join(','))
+          .join(' ')
+      );
     }
   }
 
@@ -143,5 +166,6 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
     updateClosestLinePoint,
     updateSelectBox,
     updatePointLine,
+    updateDrawPreview,
   };
 }

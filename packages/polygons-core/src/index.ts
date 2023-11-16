@@ -1,5 +1,5 @@
 import { perimeterNearestTo, Point, precalculate, updateBoundingBox } from './polygon';
-import { ActionIntent, RenderFunc, RenderState, SetState, SlowState, TransitionIntent } from './types';
+import { ActionIntent, InputShape, RenderFunc, RenderState, SetState, SlowState, TransitionIntent } from './types';
 import { translateBoundingBox } from './intents/translate-bounding-box';
 import { moveShape } from './intents/move-shape';
 import { distance } from './math';
@@ -16,7 +16,9 @@ import { cutLine } from './intents/cut-line';
 import { selectMultiplePoints } from './intents/select-multiple-points';
 import { deselectPoints } from './intents/deselect-points';
 import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
-import {deletePoint} from './intents/delete-point';
+import { deletePoint } from './intents/delete-point';
+import { drawShape } from './intents/draw-shape';
+import { stampShape } from './intents/stamp-shape';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -47,12 +49,13 @@ interface CreateHelperInput {
  * UI to the screen.
  */
 const transitionIntents = [
-  //
+  stampShape,
   boundingBoxCorners,
   movePoint,
   splitLine,
   moveShape,
   translateBoundingBox,
+  drawShape,
   selectMultiplePoints,
 ];
 const transitionIntentsLength = transitionIntents.length;
@@ -87,21 +90,48 @@ const keyIntents = [
   deletePoint,
 ];
 
+type UndoStackItem = {
+  isOpen: boolean;
+  points: Point[];
+  selectedPoints: number[];
+};
 
-const intentMap: Record<string, ActionIntent | TransitionIntent>  = {};
-transitionIntents.forEach(i => {
+const intentMap: Record<string, ActionIntent | TransitionIntent> = {};
+transitionIntents.forEach((i) => {
   intentMap[i.type] = i;
-})
-actionIntents.forEach(i => {
+});
+actionIntents.forEach((i) => {
   intentMap[i.type] = i;
-})
-keyIntents.forEach(i => {
+});
+keyIntents.forEach((i) => {
   intentMap[i.type] = i;
-})
+});
 
 const BASE_PROXIMITY = 20;
 
 export function createHelper(input: CreateHelperInput, onSave: (input: CreateHelperInput) => void) {
+  // This state will not change frequently.
+  const slowState: SlowState = {
+    transitioning: false,
+    actionIntentType: null,
+    transitionIntentType: null,
+    selectedPoints: [],
+    hasClosestLine: false,
+    modifiers: {
+      Alt: false,
+      Shift: false,
+      Meta: false,
+      proximity: BASE_PROXIMITY, // default value.
+    },
+    showBoundingBox: false,
+    currentModifiers: {},
+    validIntentKeys: {},
+    pointerInsideShape: false,
+    closestPoint: null,
+    transitionModifiers: null,
+    selectedStamp: null,
+  };
+
   // This is state that will change frequently, and used in the clock-managed render function.
   const state: RenderState = {
     isOpen: input ? input.open : false,
@@ -120,29 +150,15 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     closestLinePoint: null,
     closestLineDistance: 0,
     closestLineIndex: -1,
+    transitionRotate: false,
     transitionDirection: null,
     selectionBox: null,
+    slowState,
+    transitionDraw: [],
   };
 
   precalculate(state.polygon);
   updateBoundingBox(state.polygon);
-
-  let slowState: SlowState = {
-    transitioning: false,
-    actionIntentType: null,
-    transitionIntentType: null,
-    selectedPoints: [],
-    hasClosestLine: false,
-    modifiers: {
-      Alt: false,
-      Shift: false,
-      Meta: false,
-      proximity: BASE_PROXIMITY, // default value.
-    },
-    showBoundingBox: false,
-    currentModifiers: {},
-    validIntentKeys: {},
-  };
 
   // This is state held internally to the helper.
   const internals = {
@@ -155,6 +171,8 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     animationFrame: 0,
     actionIntent: null as ActionIntent | null,
     transitionIntent: null as TransitionIntent | null,
+    undoStack: [] as Array<UndoStackItem>,
+    undoStackPointer: -1,
   };
 
   const pointerState = {
@@ -166,19 +184,19 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   };
 
   // Internal set slow state function.
-  function setState(state: Partial<SlowState>) {
-    const keys = Object.keys(state);
+  function setState(newState: Partial<SlowState>) {
+    const keys = Object.keys(newState);
     if (keys.length === 0) return;
-    const readOnlySlowState = internals.nextSlowState || slowState;
+    const readOnlySlowState = internals.nextSlowState || state.slowState;
 
     // Optimise validIntentKeys
     if (keys.length === 1 && keys[0] === 'validIntentKeys' && readOnlySlowState.validIntentKeys) {
       const keysA = Object.keys(readOnlySlowState.validIntentKeys);
-      const keysB = Object.keys(state.validIntentKeys || {});
+      const keysB = Object.keys(newState.validIntentKeys || {});
       let change = false;
       if (keysA.length === keysB.length) {
         for (const key of keysA) {
-          if (readOnlySlowState.validIntentKeys[key] !== (state.validIntentKeys as any)[key]) {
+          if (readOnlySlowState.validIntentKeys[key] !== (newState.validIntentKeys as any)[key]) {
             change = true;
           }
         }
@@ -189,16 +207,16 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     }
 
     if (keys.includes('hasClosestLine')) {
-      if (state.hasClosestLine === readOnlySlowState.hasClosestLine) {
+      if (newState.hasClosestLine === readOnlySlowState.hasClosestLine) {
         return;
       }
     }
 
     if (internals.nextSlowState) {
-      internals.nextSlowState = { ...internals.nextSlowState, ...state };
+      internals.nextSlowState = { ...internals.nextSlowState, ...newState };
       return;
     }
-    internals.nextSlowState = { ...slowState, ...state };
+    internals.nextSlowState = { ...state.slowState, ...newState };
   }
 
   // 1. Create the clock
@@ -209,11 +227,13 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     flushSetState();
     updateBoundingBoxVisibility();
     updateClosestIntersection();
+    updateClosestPoint();
+    updateShapeIntersection();
     updateCurrentIntent();
     calculateLine();
 
     // Then the render function from the user last, once the state is updated.
-    internals.renderFunc(state, slowState, delta);
+    internals.renderFunc(state, state.slowState, delta);
 
     if (stop) return;
     internals.animationFrame = requestAnimationFrame(clockFunction);
@@ -233,13 +253,13 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       });
       internals.shouldUpdate = false;
     }
-    // console.log(internals.nextSlowState, slowState);
-    if (internals.nextSlowState && internals.nextSlowState !== slowState) {
-      const keys = Object.keys(slowState) as Array<keyof SlowState>;
+    // console.log(internals.nextSlowState, state.slowState);
+    if (internals.nextSlowState && internals.nextSlowState !== state.slowState) {
+      const keys = Object.keys(state.slowState) as Array<keyof SlowState>;
       const nextState: Record<string, any> = {};
       let didChange = false;
       for (const key of keys) {
-        const current = slowState[key];
+        const current = state.slowState[key];
         const next = internals.nextSlowState[key];
         if (current !== next) {
           didChange = true;
@@ -249,15 +269,15 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         }
       }
       if (didChange) {
-        slowState = nextState as SlowState;
+        state.slowState = nextState as SlowState;
         internals.nextSlowState = null;
-        internals.setStateFunc(slowState);
+        internals.setStateFunc(state.slowState);
       }
     }
   }
 
   function updateBoundingBoxVisibility() {
-    if (slowState.showBoundingBox) {
+    if (state.slowState.showBoundingBox) {
       if (state.selectedPoints.length === 0 || state.selectedPoints.length !== state.polygon.points.length) {
         setState({ showBoundingBox: false });
       }
@@ -268,8 +288,105 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     }
   }
 
+  function applyUndo(resp: { points: Point[]; selectedPoints: number[]; isOpen: boolean }) {
+    state.selectedPoints = resp.selectedPoints;
+    setState({ selectedPoints: resp.selectedPoints });
+
+    state.polygon.points = resp.points;
+    precalculate(state.polygon);
+    updateBoundingBox(state.polygon);
+    internals.shouldUpdate = true;
+    setState({ closestPoint: null });
+
+    if (resp.isOpen === true || resp.isOpen === false) {
+      state.isOpen = resp.isOpen;
+      internals.shouldUpdate = true;
+    }
+  }
+
+  function undo() {
+    if (internals.undoStackPointer === -1) return;
+    internals.undoStackPointer--;
+    const resp = internals.undoStack[internals.undoStackPointer];
+
+    applyUndo(resp);
+  }
+
+  function redo() {
+    if (internals.undoStackPointer === internals.undoStack.length - 1) return;
+    internals.undoStackPointer++;
+    const resp = internals.undoStack[internals.undoStackPointer];
+
+    applyUndo(resp);
+  }
+
+  function pushUndo(resp: UndoStackItem) {
+    internals.undoStackPointer++;
+    internals.undoStack[internals.undoStackPointer] = resp;
+
+    if (internals.undoStack.length > 15) {
+      internals.undoStack.shift();
+      internals.undoStackPointer--;
+    }
+  }
+
+  function updateShapeIntersection() {
+    if (!state.pointer) {
+      setState({ pointerInsideShape: false });
+      return;
+    }
+    // Does the point intersect with the shape?
+    const [x, y] = state.pointer;
+    const points = state.polygon.points;
+    const box = state.polygon.boundingBox;
+
+    // @todo only enable when all points are NOT selected.
+
+    if (!box) {
+      setState({ pointerInsideShape: false });
+      return;
+    }
+
+    // Outside the bounding box.
+    if (x < box.x || x > box.x + box.width || y < box.y || y > box.height + box.y) {
+      setState({ pointerInsideShape: false });
+      return;
+    }
+
+    // Outside the polygon.
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      if (
+        points[i][1] > y != points[j][1] > y &&
+        x < ((points[j][0] - points[i][0]) * (y - points[i][1])) / (points[j][1] - points[i][1]) + points[i][0]
+      ) {
+        inside = !inside;
+      }
+    }
+
+    setState({ pointerInsideShape: inside });
+  }
+
+  function updateClosestPoint() {
+    if (!state.pointer || state.slowState.transitioning || !state.polygon.points || state.polygon.points.length === 0)
+      return;
+
+    const [x, y] = state.pointer;
+    const pointDistances = state.polygon.points
+      .map((point, idx) => {
+        const dx = point[0] - x;
+        const dy = point[1] - y;
+        return [dx * dx + dy * dy, idx];
+      })
+      .sort((a, b) => a[0] - b[0]);
+
+    if (pointDistances.length) {
+      setState({ closestPoint: pointDistances[0][1] });
+    }
+  }
+
   function updateClosestIntersection() {
-    if (!state.pointer || slowState.transitioning) return;
+    if (!state.pointer || state.slowState.transitioning) return;
 
     const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, state.pointer);
 
@@ -292,7 +409,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
   function updateCurrentIntent() {
     if (!state.pointer) return;
-    if (slowState.transitioning) return;
+    if (state.slowState.transitioning) return;
 
     // Do some calculations for the intents to use, and also to update the pending UI.
     let didSetTransition = false;
@@ -350,7 +467,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         keyMap[intent.trigger.key] = intent.label;
       }
     }
-    setState({ validIntentKeys: keyMap  });
+    setState({ validIntentKeys: keyMap });
   }
 
   function calculateLine() {
@@ -359,13 +476,57 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
     const point = state.selectedPoints[0];
     state.line = [state.polygon.points[point], pointer];
+
+    if (state.slowState.modifiers.Shift) {
+      // Previous point will be used to give an angle offset to snap to.
+      let prevAngle = 0;
+      if (state.polygon.points.length > 1) {
+        const point = state.selectedPoints[0];
+        if (point === 0) {
+          prevAngle = Math.atan2(
+            state.polygon.points[1][1] - state.polygon.points[0][1],
+            state.polygon.points[1][0] - state.polygon.points[0][0]
+          );
+        } else {
+          prevAngle = Math.atan2(
+            state.polygon.points[point - 1][1] - state.polygon.points[point][1],
+            state.polygon.points[point - 1][0] - state.polygon.points[point][0]
+          );
+        }
+      }
+
+      // Need to snap to 45deg RELATIVE to the previous angle.
+      const dx = pointer[0] - state.polygon.points[point][0];
+      const dy = pointer[1] - state.polygon.points[point][1];
+      const angle = Math.atan2(dy, dx);
+
+      // Snap to 45deg relative to the previous angle.
+      const snap = Math.PI / 4;
+      const snapAngle = Math.round((angle - prevAngle) / snap) * snap + prevAngle;
+      const dist = distance(state.polygon.points[point], pointer);
+      const x = Math.cos(snapAngle) * dist + state.polygon.points[point][0];
+      const y = Math.sin(snapAngle) * dist + state.polygon.points[point][1];
+      state.line[1] = [x, y];
+
+      // What's the angle?
+      // const dx = pointer[0] - state.polygon.points[point][0];
+      // const dy = pointer[1] - state.polygon.points[point][1];
+      // const angle = Math.atan2(dy, dx);
+      // // Snap to 45deg
+      // const snap = Math.PI / 4;
+      // const snapAngle = Math.round(angle / snap) * snap;
+      // const dist = distance(state.polygon.points[point], pointer);
+      // const x = Math.cos(snapAngle) * dist + state.polygon.points[point][0];
+      // const y = Math.sin(snapAngle) * dist + state.polygon.points[point][1];
+      // state.line[1] = [x, y];
+    }
   }
 
   // Helpers
   // ======================
   // Just some helpers to make the code more readable.
   function getModifiers() {
-    return slowState.modifiers;
+    return state.slowState.modifiers;
   }
 
   function commit(intent: ActionIntent | TransitionIntent) {
@@ -380,12 +541,19 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         precalculate(state.polygon);
         updateBoundingBox(state.polygon);
         internals.shouldUpdate = true;
+        setState({ closestPoint: null, selectedStamp: null });
       }
       if (resp.isOpen === true || resp.isOpen === false) {
         state.isOpen = resp.isOpen;
         internals.shouldUpdate = true;
       }
+      pushUndo({
+        isOpen: state.isOpen,
+        points: state.polygon.points,
+        selectedPoints: state.selectedPoints,
+      });
     }
+    setState({ transitionModifiers: null });
   }
 
   function validate(intent: ActionIntent | TransitionIntent) {
@@ -393,11 +561,14 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   }
 
   function triggerKeyAction(key: string) {
+    if (key === 'Delete') {
+      key = 'Backspace';
+    }
     for (const keyIntent of keyIntents) {
       if (keyIntent.trigger.type !== 'key' || keyIntent.trigger.key !== key) continue;
       if (validate(keyIntent)) {
         commit(keyIntent);
-        return;
+        return true;
       }
     }
   }
@@ -421,16 +592,95 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // This allows you to set modifiers, which are used by the intents. You can
   // also use the Key manager to set these.
   const modifiers = {
+    getForType(type: string | null) {
+      const modifiers: Record<string, string> = {};
+      if (!type) return modifiers;
+      const intent = intentMap[type];
+      if (!intent || !intent.modifiers) {
+        return modifiers;
+      }
+
+      return intent.modifiers;
+    },
     set(modifier: string) {
       if (modifier !== 'Shift' && modifier !== 'Alt' && modifier !== 'Meta') return;
       setState({
-        modifiers: { ...(internals.nextSlowState?.modifiers || slowState.modifiers), [modifier]: true },
+        modifiers: { ...(internals.nextSlowState?.modifiers || state.slowState.modifiers), [modifier]: true },
       });
     },
     unset(modifier: string) {
       if (modifier !== 'Shift' && modifier !== 'Alt' && modifier !== 'Meta') return;
       setState({
-        modifiers: { ...(internals.nextSlowState?.modifiers || slowState.modifiers), [modifier]: false },
+        modifiers: { ...(internals.nextSlowState?.modifiers || state.slowState.modifiers), [modifier]: false },
+      });
+    },
+  };
+
+  const stamps = {
+    set(selectedStamp: InputShape | null) {
+      setState({ selectedStamp });
+    },
+    clear() {
+      setState({ selectedStamp: null });
+    },
+    square() {
+      setState({
+        selectedStamp: {
+          id: 'square',
+          open: false,
+          points: [
+            [0, 0],
+            [0, 100],
+            [100, 100],
+            [100, 0],
+          ],
+        },
+      });
+    },
+    triangle() {
+      setState({
+        selectedStamp: {
+          id: 'triangle',
+          open: false,
+          // Equilateral triangle (pyramid)
+          points: [
+            [50, 0],
+            [0, 100],
+            [100, 100],
+          ],
+        },
+      });
+    },
+    pentagon() {
+      setState({
+        selectedStamp: {
+          id: 'pentagon',
+          open: false,
+          points: [
+            [0, 0],
+            [0, 100],
+            [100, 100],
+            [100, 0],
+            [50, -50],
+          ],
+        },
+      });
+    },
+    hexagon() {
+      setState({
+        selectedStamp: {
+          id: 'hexagon',
+          open: false,
+          // Equilateral hexagon
+          points: [
+            [0, 0],
+            [0, 100],
+            [50, 150],
+            [100, 100],
+            [100, 0],
+            [50, -50],
+          ],
+        },
       });
     },
   };
@@ -442,11 +692,27 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     down(key: string) {
       if (key == 'Shift' || key == 'Alt' || key == 'Meta') {
         modifiers.set(key);
-        return;
+        return true;
       }
-      triggerKeyAction(key);
+      if (key === 'Control') {
+        modifiers.set('Meta');
+        return true;
+      }
+      if (key === 'z' && state.slowState.modifiers.Meta) {
+        if (state.slowState.modifiers.Shift) {
+          redo();
+        } else {
+          undo();
+        }
+        return true;
+      }
+      return triggerKeyAction(key);
     },
     up(key: string) {
+      if (key === 'Control') {
+        modifiers.unset('Meta');
+        return;
+      }
       if (key !== 'Shift' && key !== 'Alt' && key !== 'Meta') return;
       modifiers.unset(key);
     },
@@ -458,7 +724,12 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // to be taken into consideration as the world may be scaled.
   function setScale(scale: number) {
     state.scale = scale;
-    setState({ modifiers: { ...(internals.nextSlowState?.modifiers || slowState.modifiers), proximity: scale * BASE_PROXIMITY }, })
+    setState({
+      modifiers: {
+        ...(internals.nextSlowState?.modifiers || state.slowState.modifiers),
+        proximity: scale * BASE_PROXIMITY,
+      },
+    });
   }
 
   function getProximity() {
@@ -479,7 +750,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
         internals.renderFunc = renderFunc;
       }
       if (setStateFunc) {
-        setStateFunc(slowState);
+        setStateFunc(state.slowState);
         internals.setStateFunc = setStateFunc;
       }
       // First tick.
@@ -514,7 +785,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
 
     state.pointer = pointerA || null;
 
-    if (slowState.transitioning) {
+    if (state.slowState.transitioning) {
       // We are transitioning, we should update the transition.
       if (internals.transitionIntent) {
         internals.transitionIntent.transition(pointers, state, getModifiers());
@@ -538,8 +809,20 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
                 state.selectedPoints = resp.selectedPoints;
                 setState({ selectedPoints: resp.selectedPoints });
               }
+              if (resp.isOpen === true || resp.isOpen === false) {
+                state.isOpen = resp.isOpen;
+                internals.shouldUpdate = true;
+              }
+              if (resp.points) {
+                state.polygon.points = resp.points;
+                precalculate(state.polygon);
+                updateBoundingBox(state.polygon);
+                internals.shouldUpdate = true;
+                setState({ closestPoint: null });
+              }
             }
           }
+          setState({ transitionModifiers: internals.transitionIntent.modifiers || null });
           internals.transitionIntent.transition([pointerState.lastPress!], state, getModifiers());
         } else {
           pointerState.noTransition = true;
@@ -555,7 +838,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // It can be attached to both the "blur" and "mouseleave" events.
   function blur() {
     state.pointer = null;
-    if (!slowState.transitioning) {
+    if (!state.slowState.transitioning) {
       pointerState.isPressed = false;
       pointerState.isClicking = false;
       pointerState.lastPress = null;
@@ -578,7 +861,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       if (pointerState.isPressed) {
         pointerState.isClicking = false;
       }
-      pointer([pointerState.lastPress!]);
+      // pointer([pointerState.lastPress!]);
     }, 250) as any as number;
   }
 
@@ -586,7 +869,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // Attached to the SVG element, used to complete transitions OR actions
   // depending on if a click was detected.
   function pointerUp() {
-    if (slowState.transitioning) {
+    if (state.slowState.transitioning) {
       setState({ transitioning: false });
       if (internals.transitionIntent) {
         commit(internals.transitionIntent);
@@ -609,7 +892,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   }
 
   // setShape
-  function setShape(shape: { points: Array<[number, number]>; open: boolean }) {
+  function setShape(shape: InputShape) {
     state.polygon.points = shape.points;
     state.isOpen = shape.open;
     precalculate(state.polygon);
@@ -635,20 +918,20 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     });
   }
 
-  function label(type: string) {
+  function label(type: string | null) {
     if (!type) return '';
     const intent = intentMap[type];
     if (!intent || !intent.modifiers) {
       return intent.label || '';
     }
 
-    if (slowState.modifiers.Shift && intent.modifiers.Shift) {
+    if (state.slowState.modifiers.Shift && intent.modifiers.Shift) {
       return intent.modifiers.Shift;
     }
-    if (slowState.modifiers.Alt && intent.modifiers.Alt) {
+    if (state.slowState.modifiers.Alt && intent.modifiers.Alt) {
       return intent.modifiers.Alt;
     }
-    if (slowState.modifiers.Meta && intent.modifiers.Meta) {
+    if (state.slowState.modifiers.Meta && intent.modifiers.Meta) {
       return intent.modifiers.Meta;
     }
 
@@ -658,6 +941,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   return {
     state,
     modifiers,
+    stamps,
     key,
     setScale,
     clock,

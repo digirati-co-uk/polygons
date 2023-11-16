@@ -1,255 +1,307 @@
 'use client';
+import { useEffect, useReducer, useState } from 'react';
+import { AtlasAuto, HTMLPortal, ImageService, Runtime } from '@atlas-viewer/atlas';
+import { Vault, parseSelector } from '@iiif/helpers';
+import { useSvgEditor } from './_helpers/use-svg-editor';
+import { useLocalStorage } from './_helpers/use-local-storage';
+import { shapeReducer, ShapeState } from './_helpers/shape-reducer';
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { createHelper, RenderState, SlowState, createSvgHelpers } from 'polygons-core';
-import { useHelper } from './_helpers/use-helper';
+// @ts-ignore
+globalThis['IIIF_VAULT'] = globalThis['IIIF_VAULT'] || new Vault();
 
-type ShapeDefinition = {
-  points: Array<[number, number]>;
-  open: boolean;
-};
+const preset = ['default-preset', { runtimeOptions: { maxOverZoom: 5 } }];
 
-// const initialData = {
-//   points: [
-//     [120, 120],
-//     [140, 160],
-//     [210, 270],
-//     [250, 160],
-//     [250, 120],
-//   ],
-//   open: true,
-// };
+const images = [
+  {
+    id: 'https://iiif.bodleian.ox.ac.uk/iiif/image/5009dea1-d1ae-435d-a43d-453e3bad283f/info.json',
+    width: 4093,
+    height: 2743,
+  },
+  {
+    id: 'https://iiif.wellcomecollection.org/image/b18035723_0001.JP2/info.json',
+    width: 2569,
+    height: 3543,
+  },
+  {
+    id: 'https://www.davidrumsey.com/luna/servlet/iiif/RUMSEY~8~1~3419~390033/info.json',
+    width: 6203,
+    height: 7933,
+  },
+  {
+    id: 'https://iiif.ghentcdh.ugent.be/iiif/images/omeka:manifests:8e2ec7e42bf175f1c71ca0847484dfa8f5c6c520/info.json',
+    width: 3500,
+    height: 2475,
+  },
+  {
+    id: 'https://adore.ugent.be/IIIF/images/archive.ugent.be%3A5F2298BA-BF4C-11E1-8DAB-619AAAF23FF7%3ADS.1/info.json',
+    width: 5536,
+    height: 3857,
+  },
+];
 
-const svgHelpers = createSvgHelpers();
+export default function MainPage() {
+  const tileIndex = 4;
+  const [runtime, setRuntime] = useState<Runtime | undefined>();
+  const image = images[tileIndex];
 
-export type ShapeState = {
-  shapes: Array<ShapeDefinition>;
-  selectedShape: number | null;
-};
-
-export type ShapeActions =
-  | { type: 'add-shape' }
-  | { type: 'update-current-shape'; shape: ShapeDefinition }
-  | { type: 'remove-shape' }
-  | { type: 'select-shape'; idx: number }
-  | { type: 'deselect-shape' };
-
-export function shapeReducer(state: ShapeState, action: ShapeActions): ShapeState {
-  switch (action.type) {
-    case 'add-shape':
-      return {
-        ...state,
-        shapes: [
-          ...state.shapes,
-          {
-            points: [],
-            open: true,
-          },
-        ],
-        selectedShape: state.shapes.length,
-      };
-    case 'update-current-shape':
-      return {
-        ...state,
-        shapes: state.shapes.map((shape, idx) => {
-          if (idx === state.selectedShape) {
-            return action.shape;
-          }
-          return shape;
-        }),
-      };
-    case 'remove-shape':
-      return {
-        ...state,
-        shapes: state.shapes.filter((_, idx) => idx !== state.selectedShape),
-        selectedShape: null,
-      };
-    case 'select-shape':
-      return {
-        ...state,
-        selectedShape: action.idx,
-      };
-    case 'deselect-shape':
-      return {
-        ...state,
-        selectedShape: null,
-      };
-  }
-}
-
-export default function Page(): JSX.Element {
-  const [{ selectedShape, shapes }, dispatch] = useReducer(shapeReducer, {
-    shapes: [
-      {
-        points: [
-          [120, 120],
-          [140, 160],
-          [210, 270],
-          [250, 160],
-          [250, 120],
-        ],
-        open: true,
-      },
-    ],
-    selectedShape: 0,
+  const [shapeState, setShapeState] = useState<ShapeState>({
+    selectedShape: null,
+    shapes: [],
   });
 
+  // SVG STUFF
+  const [{ selectedShape, shapes }, dispatch] = useReducer(shapeReducer, shapeState);
   const currentShape = selectedShape !== null ? shapes[selectedShape] : null;
-  const boundingBox = useRef<any>();
-  const transitionBoundingBox = useRef<any>();
-  const selectBox = useRef<any>();
-  const hint = useRef<any>();
-  const transitionShape = useRef<any>();
-  const pointLine = useRef<any>();
-  const { helper, state } = useHelper(
-    currentShape,
-    (state: RenderState, slowState: SlowState) => {
-      svgHelpers.updateTransitionBoundingBox(transitionBoundingBox.current, state, slowState);
-      svgHelpers.updateBoundingBox(boundingBox.current, state, slowState);
-      svgHelpers.updateTransitionShape(transitionShape.current, state, slowState);
-      svgHelpers.updateClosestLinePoint(hint.current, state, slowState);
-      svgHelpers.updateSelectBox(selectBox.current, state, slowState);
-      svgHelpers.updatePointLine(pointLine.current, state, slowState);
+
+  const {
+    helper,
+    state,
+    defs,
+    editor,
+    transitionDirection,
+    transitionRotate,
+    isHoveringPoint,
+    isAddingPoint,
+    isSplitting,
+  } = useSvgEditor(
+    {
+      currentShape,
+      onChange: (newShape) =>
+        dispatch({
+          type: 'update-current-shape',
+          shape: newShape,
+        }),
+      image,
     },
-    (newShape) =>
-      dispatch({
-        type: 'update-current-shape',
-        shape: newShape,
-      })
+    [selectedShape]
   );
 
   useEffect(() => {
-    if (currentShape) {
-      helper.setShape(currentShape);
-    }
-  }, [selectedShape]);
+    setShapeState({ selectedShape, shapes });
+  }, [selectedShape, shapes]);
 
   const mouseMove = (e: any) => {
-    helper.pointer([[e.clientX, e.clientY]]);
-  };
-
-  const touchStart = (e) => {
-    const touch = e.touches[0];
-    helper.pointer([[touch.clientX, touch.clientY]]);
-    e.preventDefault();
-    helper.pointerDown();
-  };
-
-  const touchEnd = (e) => {
-    e.preventDefault();
-    helper.pointerUp();
-  };
-
-  const touchMove = (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    if ((e.touches as TouchList).length > 1) return;
-    helper.pointer([[touch.clientX, touch.clientY]]);
+    helper.pointer([[~~e.atlas.x, ~~e.atlas.y]]);
   };
 
   const addShape = () => {
     dispatch({ type: 'add-shape' });
   };
 
-  const removeShape = () => {
+  const deleteShape = () => {
     dispatch({ type: 'remove-shape' });
   };
 
-  const onBlur = () => {
+  const deselectShape = () => {
     dispatch({ type: 'deselect-shape' });
-    helper.blur();
   };
 
   const changeShape = (idx: number) => {
     dispatch({ type: 'select-shape', idx });
   };
 
-  const Shape = currentShape ? (currentShape.open ? 'polyline' : 'polygon') : null;
+  const addStamp = () => {
+    const points =
+      '3657,1179.5 4441.067796610169,1179.5 4441.067796610169,999.03995157385 4307.278450363196,806.1343825665858 4235.716707021792,610.7397094430992 4051.5230024213074,408.4999999999999 3862.351089588378,610.7397094430992 3800.1234866828086,806.1343825665858 3657,1011.4854721549636 3657,1179.5';
+    const shapePoints = points.split(' ').map((p) => p.split(',').map((n) => parseFloat(n)));
+    helper.stamps.set({
+      id: 'custom',
+      open: false,
+      points: shapePoints as any,
+    });
+  };
+
+  const showShapes = selectedShape !== null && currentShape?.points.length === 0;
+
+  const clearStamp = () => {
+    helper.stamps.clear();
+  };
+
+  useEffect(() => {
+    return runtime?.world.addLayoutSubscriber((ev, data) => {
+      if (ev === 'event-activation' || ev === 'zoom-to' || ev === 'go-home') {
+        if (runtime._lastGoodScale && !Number.isNaN(runtime._lastGoodScale)) {
+          helper.setScale(1 / runtime._lastGoodScale);
+        }
+      }
+    });
+  }, [runtime]);
+
+  const keyDown = (e: any) => {
+    const resp = helper.key.down(e.key);
+    if (e.key === 'Delete' || (e.key === 'Backspace' && state.showBoundingBox)) {
+      deleteShape();
+    }
+    if (resp) {
+      e.preventDefault();
+    }
+  };
+
+  const wrapperClasses: string[] = [];
+  if (transitionDirection) {
+    wrapperClasses.push(transitionDirection);
+  }
+  if (isHoveringPoint || state.transitionIntentType === 'move-shape') {
+    wrapperClasses.push('move');
+  }
+  if (isAddingPoint) {
+    wrapperClasses.push('crosshair');
+  }
+  if (isSplitting) {
+    wrapperClasses.push('copy');
+  }
+  if (transitionRotate) {
+    wrapperClasses.push('rotate');
+  }
+  if (state.transitionIntentType === 'draw-shape') {
+    wrapperClasses.push('draw');
+  }
+
+  const selectedButton = { background: 'blue' };
 
   return (
-    <div>
-      <div>
-        <svg
-          height={600}
-          width={800}
-          onPointerMove={mouseMove}
-          onBlur={onBlur}
-          onMouseDown={helper.pointerDown}
-          onMouseUp={helper.pointerUp}
-          onMouseLeave={helper.blur}
-          onTouchStart={touchStart}
-          onTouchEnd={touchEnd}
-          onTouchMove={touchMove}
-          onKeyDown={(e) => helper.key.down(e.key)}
-          onKeyUp={(e) => helper.key.up(e.key)}
-          tabIndex={-1}
-        >
+    <div style={{ display: 'flex', height: '100vh' }} onKeyDown={keyDown} onKeyUp={(e) => helper.key.up(e.key)}>
+      <div style={{ width: 400, background: '#fff', padding: 20, overflowY: 'auto', maxWidth: 400 }}>
+        <h1>POLYGONS</h1>
+        <ul>
           {shapes.map((shape, idx) => {
-            const Shape = shape.open ? 'polyline' : 'polygon';
             return (
-              <Shape
-                key={idx}
-                onClick={idx === selectedShape ? undefined : () => changeShape(idx)}
-                fill="transparent"
-                strokeWidth={2}
-                stroke={idx === selectedShape ? '#000' : '#999'}
-                points={shape.points.map((r) => r.join(',')).join(' ')}
-              />
+              <li
+                className={`list-item ${idx === selectedShape ? 'list-item--selected' : ''}`}
+                onClick={() => changeShape(idx)}
+              >
+                <div className="poly-thumb">
+                  <svg viewBox={`0 0 ${image.width} ${image.height}`}>
+                    <polygon points={shape.points.map((r) => r.join(',')).join(' ')} />
+                  </svg>
+                </div>
+                <h3>Shape {idx + 1}</h3>
+                {selectedShape === idx ? (
+                  <div>
+                    <button onClick={() => deleteShape()}>Delete</button>
+                  </div>
+                ) : null}
+              </li>
             );
           })}
-          {currentShape && Shape ? (
-            <>
-              {!state.transitioning &&
-              (state.actionIntentType === 'add-open-point' || state.actionIntentType === 'close-shape') ? (
-                <polyline
-                  stroke="#000"
-                  ref={pointLine}
-                  strokeWidth={state.actionIntentType === 'close-shape' ? 2 : 1}
-                />
-              ) : null}
-              {state.hasClosestLine && (!state.transitionIntentType || state.transitionIntentType === 'split-line') ? (
-                <circle ref={hint} cx={0} cy={0} r={5} stroke="#000" />
-              ) : null}
-              {state.transitioning ? (
-                <Shape
-                  ref={transitionShape}
-                  fill={currentShape.open ? 'none' : 'rgba(255, 0, 0, .5)'}
-                  stroke="rgba(255, 0, 0, .5)"
-                  strokeWidth={currentShape.open ? 2 : 0}
-                />
-              ) : null}
-              {state.transitioning && state.transitionIntentType === 'select-multiple-points' ? (
-                <rect ref={selectBox} fill="rgba(255, 255, 255, .3)" strokeWidth={1} stroke="rgba(0,0,0,.2)" />
-              ) : null}
-              {!state.showBoundingBox ? (
-                <g name="controls">
-                  {currentShape.points.map((point, key) => {
-                    const selectedBounds = null;
-                    const isActive = (state.selectedPoints || []).includes(key);
+        </ul>
+        <button onClick={addShape}>Add shape</button>
+        <button onClick={deselectShape}>Deselect shape</button>
+        <div>
+          <hr />
+          <button onClick={clearStamp}>None</button>
+          <button
+            onClick={addStamp}
+            disabled={!showShapes}
+            style={state.selectedStamp?.id === 'custom' ? selectedButton : undefined}
+          >
+            Custom
+          </button>
+          <button
+            onClick={() => helper.stamps.triangle()}
+            disabled={!showShapes}
+            style={state.selectedStamp?.id === 'triangle' ? selectedButton : undefined}
+          >
+            Triangle
+          </button>
+          <button
+            onClick={() => helper.stamps.square()}
+            disabled={!showShapes}
+            style={state.selectedStamp?.id === 'square' ? selectedButton : undefined}
+          >
+            Square
+          </button>
+          <button
+            onClick={() => helper.stamps.hexagon()}
+            disabled={!showShapes}
+            style={state.selectedStamp?.id === 'hexagon' ? selectedButton : undefined}
+          >
+            Hexagon
+          </button>
+        </div>
 
-                    return (
-                      <circle
-                        className={`controls ${isActive ? 'controls--selected' : ''}${
-                          selectedBounds ? ' controls--bounds' : ''
-                        }`}
-                        key={key}
-                        cx={point[0]}
-                        cy={point[1]}
-                        r={isActive && selectedBounds ? 3 : 5}
-                      />
-                    );
-                  })}
-                </g>
-              ) : null}
-              {state.showBoundingBox ? <rect ref={boundingBox} strokeWidth={1} stroke="#999" fill="none" /> : null}
-            </>
-          ) : null}
-        </svg>
+        <hr />
+        <div>Transition intent: {helper.label(state.transitionIntentType)}</div>
+        <pre>{JSON.stringify(helper.modifiers.getForType(state.transitionIntentType), null, 2)}</pre>
+        <div>Action intent: {helper.label(state.actionIntentType)}</div>
+        <pre>{JSON.stringify(helper.modifiers.getForType(state.actionIntentType), null, 2)}</pre>
+        <pre>{JSON.stringify(state, null, 2)}</pre>
       </div>
-      <button onClick={addShape}>Add shape</button>
-      <div>Transition intent: {state.transitionIntentType}</div>
-      <pre>{JSON.stringify({ currentShape }, null, 2)}</pre>
-      <pre>{JSON.stringify(state, null, 2)}</pre>
+      <div className={wrapperClasses.join(' ')} style={{ flex: 1, alignContent: 'stretch', display: 'flex' }}>
+        <AtlasAuto
+          onCreated={(rt) => setRuntime(rt.runtime)}
+          mode={currentShape ? 'sketch' : 'explore'}
+          renderPreset={preset as any}
+          containerStyle={{ height: '100%', width: '100%', flex: 1 }}
+        >
+          <world>
+            <ImageService key={`tile-${tileIndex}`} {...images[tileIndex]} />
+            <world-object
+              height={image.height}
+              width={image.width}
+              onPointerMove={mouseMove}
+              onMouseDown={helper.pointerDown}
+              onMouseUp={helper.pointerUp}
+              onMouseLeave={helper.blur}
+            >
+              {shapes.map((shape, idx) => {
+                if (idx === selectedShape) {
+                  return null;
+                }
+
+                const Shape = 'shape' as any;
+                return (
+                  <Shape
+                    id={`shape-${idx}`}
+                    key={idx}
+                    // className="shape"
+                    onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}
+                    points={shape.points}
+                    target={{ x: 0, y: 0, width: image.width, height: image.height }}
+                    style={
+                      {
+                        backgroundColor: 'rgba(119, 24, 196, 0.25)',
+                        ':hover': {
+                          backgroundColor: 'rgba(119, 24, 196, 0.6)',
+                        },
+                      } as any
+                    }
+                    // vectorEffect="non-scaling-stroke"
+                    // style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
+                  />
+                );
+              })}
+              <HTMLPortal relative={true} interactive={false}>
+                <div style={{ position: 'absolute', top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <svg width="100%" height="100%" viewBox={`0 0 ${image.width} ${image.height}`} tabIndex={-1}>
+                    <defs>{defs}</defs>
+
+                    {/*{shapes.map((shape, idx) => {*/}
+                    {/*  if (idx === selectedShape) {*/}
+                    {/*    return null;*/}
+                    {/*  }*/}
+
+                    {/*  const Shape = shape.open ? 'polyline' : 'polygon';*/}
+                    {/*  return (*/}
+                    {/*    <Shape*/}
+                    {/*      key={idx}*/}
+                    {/*      className="shape"*/}
+                    {/*      onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}*/}
+                    {/*      points={shape.points.map((r) => r.join(',')).join(' ')}*/}
+                    {/*      vectorEffect="non-scaling-stroke"*/}
+                    {/*      style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}*/}
+                    {/*    />*/}
+                    {/*  );*/}
+                    {/*})}*/}
+
+                    {editor}
+                  </svg>
+                </div>
+              </HTMLPortal>
+            </world-object>
+          </world>
+        </AtlasAuto>
+      </div>
     </div>
   );
 }

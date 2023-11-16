@@ -1,15 +1,19 @@
 'use client';
-import {useEffect, useReducer, useRef, useState} from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { AtlasAuto, HTMLPortal, ImageService, Runtime } from '@atlas-viewer/atlas';
 import { Vault } from '@iiif/helpers';
 import { createSvgHelpers, RenderState, SlowState } from 'polygons-core';
-import { shapeReducer } from '../page';
 import { useHelper } from '../_helpers/use-helper';
+import { simplifyPolygon } from 'polygons-core/src/math';
+import { ContourFinder } from 'contours.ts';
+import { shapeReducer } from '../_helpers/shape-reducer';
 
 // @ts-ignore
 globalThis['IIIF_VAULT'] = globalThis['IIIF_VAULT'] || new Vault();
 
 const svgHelpers = createSvgHelpers();
+
+// const preset: any = ['default-preset', { runtimeOptions: { maxOverZoom: 2 } }];
 
 const images = [
   {
@@ -17,7 +21,24 @@ const images = [
     width: 4093,
     height: 2743,
   },
+  {
+    id: 'https://iiif.wellcomecollection.org/image/b18035723_0001.JP2/info.json',
+    width: 2569,
+    height: 3543,
+  },
+  {
+    id: 'https://www.davidrumsey.com/luna/servlet/iiif/RUMSEY~8~1~3419~390033/info.json',
+    width: 6203,
+    height: 7933,
+  },
+  {
+    id: 'https://iiif.ghentcdh.ugent.be/iiif/images/omeka:manifests:8e2ec7e42bf175f1c71ca0847484dfa8f5c6c520/info.json',
+    width: 3500,
+    height: 2475,
+  },
 ];
+
+const preset = ['default-preset', { runtimeOptions: { maxOverZoom: 5 } }];
 
 const initial =
   '1994.8372880345844,542.9799095046249 1389.7943098831715,541.9712329638949 783.2344834391947,524.3540267228414 782.8283719384256,414.5017713686179 924.8374558739616,394.5354576122192 1896.632633648073,396.2868363004681 1989.796566833351,456.2086183937519'
@@ -25,7 +46,7 @@ const initial =
     .map((p) => p.split(',').map((n) => parseFloat(n)));
 
 export default function AtlasPage() {
-  const tileIndex = 0;
+  const tileIndex = 2;
   const [runtime, setRuntime] = useState<Runtime | undefined>();
   const image = images[tileIndex];
 
@@ -45,18 +66,21 @@ export default function AtlasPage() {
   const transitionBoundingBox = useRef<any>();
   const selectBox = useRef<any>();
   const hint = useRef<any>();
+  const transitionDraw = useRef<any>();
   const transitionShape = useRef<any>();
   const pointLine = useRef<any>();
+  const [transitionDirection, setTransitionDirection] = useState<string | null>(null);
   const { helper, state } = useHelper(
     currentShape,
     (state: RenderState, slowState: SlowState) => {
       svgHelpers.updateTransitionBoundingBox(transitionBoundingBox.current, state, slowState);
       svgHelpers.updateBoundingBoxPolygon(boundingBox.current, state, slowState);
       svgHelpers.updateTransitionShape(transitionShape.current, state, slowState);
-      // svgHelpers.updateClosestLinePoint(hint.current, state, slowState);
       svgHelpers.updateClosestLinePointTransform(hint.current, state, slowState);
       svgHelpers.updateSelectBox(selectBox.current, state, slowState);
       svgHelpers.updatePointLine(pointLine.current, state, slowState);
+      svgHelpers.updateDrawPreview(transitionDraw.current, state, slowState, 3);
+      setTransitionDirection(state.transitionDirection);
     },
     (newShape) =>
       dispatch({
@@ -72,7 +96,7 @@ export default function AtlasPage() {
   }, [selectedShape]);
 
   const mouseMove = (e: any) => {
-    helper.pointer([[e.atlas.x, e.atlas.y]]);
+    helper.pointer([[~~e.atlas.x, ~~e.atlas.y]]);
   };
 
   const touchStart = (e) => {
@@ -116,20 +140,66 @@ export default function AtlasPage() {
     return runtime?.world.addLayoutSubscriber((ev, data) => {
       if (ev === 'event-activation' || ev === 'zoom-to' || ev === 'go-home') {
         if (runtime._lastGoodScale && !Number.isNaN(runtime._lastGoodScale)) {
-          helper.setScale(1/runtime._lastGoodScale);
+          helper.setScale(1 / runtime._lastGoodScale);
         }
       }
-    })
+    });
   }, [runtime]);
 
+  const isHoveringPoint =
+    !state.showBoundingBox && state.closestPoint !== null && state.actionIntentType === 'select-point';
+
+  const isAddingPoint = state.actionIntentType === 'add-open-point';
+
+  const isSplitting = state.transitionIntentType === 'split-line';
+
+  const keyDown = (e: any) => {
+    const resp = helper.key.down(e.key);
+    if (resp) {
+      e.preventDefault();
+    }
+  };
+
+  const findShapes = async () => {
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      const img = new Image();
+      img.src = 'https://iiif.wellcomecollection.org/image/b18035723_0001.JP2/full/725,/0/default.jpg';
+      const canvas = document.createElement('canvas');
+      canvas.width = 725;
+      canvas.height = 1000;
+      const ctx = canvas.getContext('2d');
+      ctx!.filter = 'grayscale() contrast(1.5) brightness(1.5)';
+      ctx!.drawImage(img, 0, 0, 725, 1000);
+
+      const data = ctx!.getImageData(0, 0, 725, 1000);
+      console.log(data);
+
+      const resp = new ContourFinder(data, {
+        // blur: true, // blurs the image data
+        threshold: 50, // threshold image data
+      });
+
+      console.log(resp);
+    }
+  };
+
   return (
-    <div onKeyDown={(e) => helper.key.down(e.key)} onKeyUp={(e) => helper.key.up(e.key)}>
+    <div
+      className={`${transitionDirection || ''} ${
+        isHoveringPoint || state.transitionIntentType === 'move-shape' ? 'move' : ''
+      } ${isAddingPoint ? 'crosshair' : ''} ${isSplitting ? 'copy' : ''}`}
+      onKeyDown={keyDown}
+      onKeyUp={(e) => helper.key.up(e.key)}
+    >
       <AtlasAuto
         onCreated={(rt) => {
           setRuntime(rt.runtime);
         }}
+        // renderPreset={preset}
         // runtimeOptions={{ maxOverZoom: scale / 100 }}
         mode={currentShape ? 'sketch' : 'explore'}
+        renderPreset={preset as any}
         // renderPreset="default-preset"
         // width={size.width}
         // height={size.height}
@@ -179,7 +249,13 @@ export default function AtlasPage() {
                       <Shape
                         key={idx}
                         onClick={idx === selectedShape ? undefined : () => changeShape(idx)}
-                        fill="transparent"
+                        fill={
+                          idx === selectedShape &&
+                          !state.transitioning &&
+                          (state.pointerInsideShape || state.showBoundingBox)
+                            ? 'rgba(255, 0, 0, .5)'
+                            : 'none'
+                        }
                         strokeWidth={2}
                         stroke={idx === selectedShape ? '#000' : '#999'}
                         points={shape.points.map((r) => r.join(',')).join(' ')}
@@ -191,6 +267,15 @@ export default function AtlasPage() {
                       />
                     );
                   })}
+                  {state.transitionIntentType === 'draw-shape' && state.transitioning ? (
+                    <polyline
+                      ref={transitionDraw}
+                      fill="none"
+                      stroke="rgba(255, 0, 0, .5)"
+                      strokeWidth={2}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
                   {currentShape && Shape ? (
                     <>
                       {!state.showBoundingBox && state.selectedPoints && state.selectedPoints.length ? (
@@ -206,6 +291,21 @@ export default function AtlasPage() {
                             .filter((p, idx) => state.selectedPoints?.includes(idx))
                             .map((r) => r.join(','))
                             .join(' ')}
+                        />
+                      ) : null}
+
+                      {isHoveringPoint && state.closestPoint ? (
+                        <polyline
+                          strokeWidth={2}
+                          vectorEffect="non-scaling-stroke"
+                          stroke="transparent"
+                          markerStart="url(#selected)"
+                          markerMid="url(#selected)"
+                          markerEnd="url(#selected)"
+                          fill="transparent"
+                          points={`${currentShape.points[state.closestPoint][0]},${
+                            currentShape.points[state.closestPoint][1]
+                          }`}
                         />
                       ) : null}
 
@@ -289,6 +389,7 @@ export default function AtlasPage() {
         </world>
       </AtlasAuto>
       <button onClick={addShape}>Add shape</button>
+      <button onClick={findShapes}>Find shapes</button>
       <div>Transition intent: {helper.label(state.transitionIntentType)}</div>
       <div>Action intent: {helper.label(state.actionIntentType)}</div>
       <pre>{JSON.stringify(state, null, 2)}</pre>

@@ -1,5 +1,6 @@
 import { ActionIntent } from '../types';
 import { splitLine } from './split-line';
+import { Point } from '../polygon';
 
 export const cutLine: ActionIntent = {
   type: 'cut-line',
@@ -15,8 +16,8 @@ export const cutLine: ActionIntent = {
     if (modifiers.Shift && !state.isOpen) {
       // We want to split.
       const points = state.polygon.points;
-      const beforePoints = [];
-      const afterPoints = [];
+      const beforePoints: Point[] = [];
+      const afterPoints: Point[] = [];
       let hasSplit = false;
       for (let i = 0; i < points.length; i++) {
         if (!hasSplit) {
@@ -31,6 +32,7 @@ export const cutLine: ActionIntent = {
           hasSplit = true;
         }
       }
+
       return {
         isOpen: true,
         points: [...afterPoints, ...beforePoints],
@@ -39,7 +41,7 @@ export const cutLine: ActionIntent = {
 
     // Otherwise we want to insert a new point.
     const points = state.polygon.points;
-    const newPoints = [];
+    const newPoints: Point[] = [];
 
     for (let i = 0; i < points.length; i++) {
       newPoints.push(points[i]);

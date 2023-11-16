@@ -10,7 +10,7 @@ export const closeShape: ActionIntent = {
       return false;
     }
 
-    if (state.selectedPoints.length !== 1) {
+    if (state.selectedPoints.length !== 1 || state.polygon.points.length < 2) {
       return false;
     }
 

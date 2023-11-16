@@ -22,14 +22,20 @@ export const addOpenPoint: ActionIntent = {
     return selected === 0 || selected === state.polygon.points.length - 1;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const pointer = pointers[0]!;
+    const pointer = state.line ? state.line[1] : pointers[0]!;
     const currentPoints = state.polygon.points;
 
     if (currentPoints.length === 0) {
       return {
         selectedPoints: [0],
-        points: [pointer],
+        points: [pointers[0]!],
       };
+    }
+
+    if (modifiers.Shift) {
+      // If we have 3 points currently, and they are all at 90 degrees, then we should
+      // check if the point is close to the first point (x or y), and if so, close the shape.
+      // @todo
     }
 
     const selected = state.selectedPoints[0];
@@ -40,6 +46,8 @@ export const addOpenPoint: ActionIntent = {
         points: [pointer, ...currentPoints],
       };
     }
+
+    state.line = null;
 
     return {
       selectedPoints: [currentPoints.length],

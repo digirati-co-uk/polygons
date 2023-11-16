@@ -7,6 +7,9 @@ export const nudgeRight: ActionIntent = {
   type: 'nudge-right',
   label: 'Nudge right',
   trigger: { type: 'key', key: 'ArrowRight' },
+  modifiers: {
+    Shift: 'Nudge right more',
+  },
   isValid(pointers, state, modifiers) {
     return state.selectedPoints.length > 0;
   },
@@ -16,7 +19,7 @@ export const nudgeRight: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [p[0] + (modifiers.Shift ? (NUDGE_AMOUNT_MODIFIER * dist) : dist), p[1]];
+        return [p[0] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1), p[1]];
       }
       return p;
     });
@@ -28,6 +31,9 @@ export const nudgeLeft: ActionIntent = {
   type: 'nudge-left',
   label: 'Nudge left',
   trigger: { type: 'key', key: 'ArrowLeft' },
+  modifiers: {
+    Shift: 'Nudge left more',
+  },
   isValid(pointers, state, modifiers) {
     return state.selectedPoints.length > 0;
   },
@@ -37,7 +43,7 @@ export const nudgeLeft: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [Math.max(0, p[0] - (modifiers.Shift ? (NUDGE_AMOUNT_MODIFIER * dist) : dist)), p[1]];
+        return [Math.max(0, p[0] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1)), p[1]];
       }
       return p;
     });
@@ -49,6 +55,9 @@ export const nudgeUp: ActionIntent = {
   type: 'nudge-up',
   label: 'Nudge up',
   trigger: { type: 'key', key: 'ArrowUp' },
+  modifiers: {
+    Shift: 'Nudge up more',
+  },
   isValid(pointers, state, modifiers) {
     return state.selectedPoints.length > 0;
   },
@@ -58,7 +67,7 @@ export const nudgeUp: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [p[0], Math.max(0, p[1] - (modifiers.Shift ? (NUDGE_AMOUNT_MODIFIER * dist) : dist))];
+        return [p[0], Math.max(0, p[1] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1))];
       }
       return p;
     });
@@ -70,6 +79,9 @@ export const nudgeDown: ActionIntent = {
   type: 'nudge-down',
   label: 'Nudge down',
   trigger: { type: 'key', key: 'ArrowDown' },
+  modifiers: {
+    Shift: 'Nudge down more',
+  },
   isValid(pointers, state, modifiers) {
     return state.selectedPoints.length > 0;
   },
@@ -79,7 +91,7 @@ export const nudgeDown: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [p[0], p[1] + (modifiers.Shift ? (NUDGE_AMOUNT_MODIFIER * dist) : dist)];
+        return [p[0], p[1] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1)];
       }
       return p;
     });

@@ -5,6 +5,57 @@ html, body {
     overflow: hidden;
 }
 
+.atlas-container {
+    --atlas-container-display: flex;
+    --atlas-container-height: 100%;
+    --atlas-container-flex: 1 1 0px;
+    --atlas-background:  #E5E7F0;
+    min-width: 0;
+    min-height: 0;
+}
+
+.poly-thumb svg {
+    max-width: 100px;
+    max-height: 100px;
+    border: 1px solid #E5E7F0;
+}
+.poly-thumb svg polygon {
+    fill: #a853ba;
+}
+
+.poly-thumb {
+    width: 100px;
+}
+
+*, *:before, *:after {
+    box-sizing: border-box;
+}
+
+.list-item {
+    cursor: pointer;
+    padding: 10px;
+    border: 2px solid #eee;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.list-item--selected {
+    border-color: #2a8af6;
+}
+
+.list-item h3 {
+    flex: 1;
+    padding-left: 10px;
+}
+
+ul {
+    margin: 0;
+    padding: 0;
+}
+
 .controls {
     fill: #fff;
     stroke: #000;
@@ -26,4 +77,50 @@ html, body {
     fill: #fff;
     stroke: #000;
     stroke-width: 2px;
+}
+
+
+.se {
+    cursor: se-resize;
+}
+
+.sw {
+    cursor: sw-resize;
+}
+
+.ne {
+    cursor: ne-resize;
+}
+
+.nw {
+    cursor: nw-resize;
+}
+
+.move {
+    cursor: move;
+}
+
+.crosshair {
+    cursor: crosshair;
+}
+
+.copy {
+    cursor: copy;
+}
+
+.rotate {
+    cursor: url("/cursor/rotate.png") 8 8, pointer;
+}
+.draw {
+    cursor: url("/cursor/draw.png") 4 4, pointer;
+}
+
+.shape {
+    cursor: pointer;
+    fill: rgba(119, 24, 196, 0.25);
+    pointer-events: visible;
+}
+
+.shape:hover {
+    fill: rgba(119, 24, 196, 0.5);
 }
