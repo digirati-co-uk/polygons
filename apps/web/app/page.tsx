@@ -137,6 +137,10 @@ export default function MainPage() {
     }
   };
 
+  const toggleDrawMode = () => {
+    helper.draw.toggle();
+  };
+
   const wrapperClasses: string[] = [];
   if (transitionDirection) {
     wrapperClasses.push(transitionDirection);
@@ -157,7 +161,7 @@ export default function MainPage() {
     wrapperClasses.push('draw');
   }
 
-  const selectedButton = { background: 'blue' };
+  const selectedButton = { background: 'blue', color: '#fff' };
 
   return (
     <div style={{ display: 'flex', height: '100vh' }} onKeyDown={keyDown} onKeyUp={(e) => helper.key.up(e.key)}>
@@ -187,6 +191,21 @@ export default function MainPage() {
         </ul>
         <button onClick={addShape}>Add shape</button>
         <button onClick={deselectShape}>Deselect shape</button>
+        <hr />
+        <button
+          disabled={!!state.selectedStamp || !showShapes || state.drawMode}
+          onClick={() => helper.draw.enable()}
+          style={!state.selectedStamp && showShapes && state.drawMode ? selectedButton : undefined}
+        >
+          Draw mode
+        </button>
+        <button
+          disabled={!!state.selectedStamp || !showShapes || !state.drawMode}
+          onClick={() => helper.draw.disable()}
+          style={!state.selectedStamp && showShapes && !state.drawMode ? selectedButton : undefined}
+        >
+          Line mode
+        </button>
         <div>
           <hr />
           <button onClick={clearStamp}>None</button>

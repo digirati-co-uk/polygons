@@ -31,7 +31,7 @@ export const stampShape: TransitionIntent = {
       if (stampHeight / 32 > ratio) {
         ratio = stampHeight / 32;
       }
-      const selectedPoints = [];
+      const selectedPoints: number[] = [];
       let i = 0;
       for (const point of stamp.points) {
         selectedPoints.push(i);

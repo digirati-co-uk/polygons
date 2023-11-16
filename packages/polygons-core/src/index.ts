@@ -130,6 +130,7 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     closestPoint: null,
     transitionModifiers: null,
     selectedStamp: null,
+    drawMode: false,
   };
 
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -592,6 +593,9 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
   // This allows you to set modifiers, which are used by the intents. You can
   // also use the Key manager to set these.
   const modifiers = {
+    reset() {
+      setState({ modifiers: { Alt: false, Shift: false, Meta: false, proximity: BASE_PROXIMITY } });
+    },
     getForType(type: string | null) {
       const modifiers: Record<string, string> = {};
       if (!type) return modifiers;
@@ -899,6 +903,11 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     updateBoundingBox(state.polygon);
     internals.nextSlowState = null;
     internals.shouldUpdate = true;
+    internals.undoStack = [];
+    internals.undoStackPointer = -1;
+    if (pointerState.pressTimeout) {
+      clearTimeout(pointerState.pressTimeout);
+    }
     // Reset
     setState({
       transitioning: false,
@@ -915,7 +924,12 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
       showBoundingBox: false,
       currentModifiers: {},
       validIntentKeys: {},
+      selectedStamp: null,
+      drawMode: false,
+      closestPoint: null,
+      pointerInsideShape: false,
     });
+    flushSetState();
   }
 
   function label(type: string | null) {
@@ -938,7 +952,20 @@ export function createHelper(input: CreateHelperInput, onSave: (input: CreateHel
     return intent.label;
   }
 
+  const draw = {
+    enable() {
+      setState({ drawMode: true });
+    },
+    disable() {
+      setState({ drawMode: false });
+    },
+    toggle() {
+      setState({ drawMode: !state.slowState.drawMode });
+    },
+  };
+
   return {
+    draw,
     state,
     modifiers,
     stamps,

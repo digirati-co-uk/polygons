@@ -31,6 +31,7 @@ export interface SlowState {
   modifiers: Modifiers;
   showBoundingBox: boolean;
   pointerInsideShape: boolean;
+  drawMode: boolean;
   closestPoint: null | number;
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;

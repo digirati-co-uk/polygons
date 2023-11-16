@@ -45,6 +45,16 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
     }
   }, deps);
 
+  useEffect(() => {
+    const windowBlur = () => {
+      helper.modifiers.reset();
+    };
+    document.addEventListener('mouseleave', windowBlur);
+    return () => {
+      document.removeEventListener('mouseleave', windowBlur);
+    };
+  }, []);
+
   // Paste
   useEffect(() => {
     const onPaste = async (e: any) => {

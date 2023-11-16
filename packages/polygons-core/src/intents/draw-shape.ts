@@ -6,7 +6,8 @@ export const drawShape: TransitionIntent = {
   type: 'draw-shape',
   label: 'Draw shape',
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    if (state.isOpen && (state.line || state.polygon.points.length === 0) && modifiers.Alt) {
+    const shouldDraw = modifiers.Alt || state.slowState.drawMode === true;
+    if (state.isOpen && (state.line || state.polygon.points.length === 0) && shouldDraw) {
       return true;
     }
 
@@ -20,7 +21,6 @@ export const drawShape: TransitionIntent = {
     state.transitionDraw.push(pointers[0]);
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    // @todo
     const points = simplifyPolygon(state.transitionDraw, state.scale * 3);
     state.transitionDraw = [];
 
