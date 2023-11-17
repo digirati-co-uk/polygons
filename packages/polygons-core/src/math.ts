@@ -20,7 +20,7 @@ export function distance1D(a: number, b: number) {
   return Math.abs(a - b);
 }
 
-export function distance(a: [number, number], b: [number, number]) {
+export function distance(a: Point, b: Point) {
   const xDelta = distance1D(a[0], b[0]);
   const yDelta = distance1D(a[1], b[1]);
   return Math.sqrt(Math.pow(xDelta, 2) + Math.pow(yDelta, 2));

@@ -35,7 +35,12 @@ export const translateBoundingBox: TransitionIntent = {
     const dx = pointer[0] - startingPoint[0];
     const dy = pointer[1] - startingPoint[1];
 
-    state.transitionPoints = state.polygon.points.map((point) => [point[0] + dx, point[1] + dy]);
+    state.transitionPoints = state.polygon.points.map((point) => {
+      if (point.length === 6) {
+        return [point[0] + dx, point[1] + dy, point[2], point[3], point[4], point[5]];
+      }
+      return [point[0] + dx, point[1] + dy];
+    });
     state.transitionBoundingBox = {
       x: box.x + dx,
       y: box.y + dy,

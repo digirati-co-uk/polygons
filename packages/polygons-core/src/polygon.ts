@@ -1,16 +1,23 @@
 // # SPDX-License-Identifier: CC0-1.0
 // Adapted from: https://math.stackexchange.com/questions/4079605/how-to-find-closest-point-to-polygon-shape-from-any-coordinate
 
-export type Point = [number, number];
+export type Point =
+  | [number, number]
+  // This is bezier control points, the definition here REQUIRES both points. They are forward on the line.
+  | [number, number, number, number, number, number];
 
 export interface Polygon {
   points: Point[];
   boundingBox: { x: number; y: number; width: number; height: number; rotation?: number } | null;
   iedges: null | Point[];
+  isBezier: null | boolean;
+  bezierLines: [number, Point, Point][];
 }
 
 export function precalculate(polygon: Polygon) {
   const n = polygon.points.length;
+  let isBezier = false;
+  const bezierLines: [number, Point, Point][] = [];
   if (n > 1) {
     polygon.iedges = [];
     let pB = polygon.points[n - 1];
@@ -18,6 +25,17 @@ export function precalculate(polygon: Polygon) {
     for (let i = 0; i < n; i++) {
       const pA = pB;
       pB = polygon.points[i];
+      if (pB.length === 6) {
+        // These points are relative, but bezierLines is absolute.
+        const c1x = pB[2];
+        const c1y = pB[3];
+        const c2x = pB[4];
+        const c2y = pB[5];
+
+        bezierLines.push([i, [pB[0] + c1x, pB[1] + c1y], [pB[0] + c2x, pB[1] + c2y]]);
+
+        isBezier = true;
+      }
       const pAB = [pB[0] - pA[0], pB[1] - pA[1]];
       const DD = pAB[0] * pAB[0] + pAB[1] * pAB[1];
 
@@ -32,6 +50,9 @@ export function precalculate(polygon: Polygon) {
   } else {
     polygon.iedges = null;
   }
+
+  polygon.isBezier = isBezier;
+  polygon.bezierLines = bezierLines;
 }
 
 export function setPoints(polygon: Polygon, newPoints: Point[]) {

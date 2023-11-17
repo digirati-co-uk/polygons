@@ -53,6 +53,8 @@ export const selectPoint: ActionIntent = {
 
     const closestPoint = pointDistances[0];
 
+    state.line = null;
+
     if (!selectedPoints.includes(closestPoint[1])) {
       selectedPoints.push(closestPoint[1]);
     } else if (modifiers.Shift) {

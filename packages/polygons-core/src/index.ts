@@ -1,4 +1,4 @@
-import { perimeterNearestTo, Point, precalculate, updateBoundingBox } from './polygon';
+import { perimeterNearestTo, Point, Polygon, precalculate as _precalculate, updateBoundingBox } from './polygon';
 import { ActionIntent, InputShape, RenderFunc, RenderState, SetState, SlowState, TransitionIntent } from './types';
 import { translateBoundingBox } from './intents/translate-bounding-box';
 import { moveShape } from './intents/move-shape';
@@ -134,6 +134,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     transitionModifiers: null,
     selectedStamp: null,
     drawMode: false,
+    bezierLines: [],
   };
 
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -143,6 +144,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       points: input?.points || [],
       iedges: null,
       boundingBox: null,
+      isBezier: null,
+      bezierLines: [],
     },
     scale: 1,
     selectedPoints: [],
@@ -156,13 +159,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     closestLineIndex: -1,
     transitionRotate: false,
     transitionDirection: null,
+    transitionBezierLine: null,
     selectionBox: null,
     slowState,
     transitionDraw: [],
   };
-
-  precalculate(state.polygon);
-  updateBoundingBox(state.polygon);
 
   // This is state held internally to the helper.
   const internals = {
@@ -186,6 +187,17 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     pressTimeout: 0,
     noTransition: false,
   };
+
+  function precalculate(polygon: Polygon) {
+    _precalculate(polygon);
+    if (polygon.isBezier) {
+      setState({ bezierLines: polygon.bezierLines });
+    }
+    updateBoundingBox(polygon);
+    internals.shouldUpdate = true;
+  }
+
+  precalculate(state.polygon);
 
   // Internal set slow state function.
   function setState(newState: Partial<SlowState>) {
@@ -308,9 +320,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     state.polygon.points = resp.points;
     state.polygon.boundingBox = null;
     state.polygon.iedges = null;
+    state.polygon.isBezier = null;
     precalculate(state.polygon);
-    updateBoundingBox(state.polygon);
-    internals.shouldUpdate = true;
     setState({ closestPoint: null });
 
     if (resp.isOpen === true || resp.isOpen === false) {
@@ -569,10 +580,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
         state.polygon.points = resp.points;
         state.polygon.boundingBox = null;
         state.polygon.iedges = null;
+        state.polygon.isBezier = null;
         state.transitionBoundingBox = null;
         precalculate(state.polygon);
-        updateBoundingBox(state.polygon);
-        internals.shouldUpdate = true;
         setState({ closestPoint: null, selectedStamp: null });
       }
       if (resp.isOpen === true || resp.isOpen === false) {
@@ -853,8 +863,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
                 state.polygon.boundingBox = null;
                 state.polygon.iedges = null;
                 precalculate(state.polygon);
-                updateBoundingBox(state.polygon);
-                internals.shouldUpdate = true;
                 setState({ closestPoint: null });
               }
             }
@@ -935,9 +943,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     state.polygon.iedges = null;
     state.isOpen = shape?.open || false;
     precalculate(state.polygon);
-    updateBoundingBox(state.polygon);
     internals.nextSlowState = null;
-    internals.shouldUpdate = true;
     internals.undoStack = [];
     internals.undoStackPointer = -1;
     if (pointerState.pressTimeout) {

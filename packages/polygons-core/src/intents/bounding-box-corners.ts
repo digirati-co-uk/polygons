@@ -126,11 +126,16 @@ export const boundingBoxCorners: TransitionIntent = {
         const x3 = x2 + origin[0];
         const y3 = y2 + origin[1];
 
+        if (point.length === 6) {
+          newPoints.push([x3, y3, point[2], point[3], point[4], point[5]]);
+          continue;
+        }
+
         newPoints.push([x3, y3]);
       }
 
       state.transitionPoints = newPoints;
-      const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null };
+      const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null, isBezier: false, bezierLines: [] };
       updateBoundingBox(poly);
       state.transitionBoundingBox = state.polygon.boundingBox
         ? { ...state.polygon.boundingBox, rotation: angleDiff }
@@ -199,10 +204,15 @@ export const boundingBoxCorners: TransitionIntent = {
       const x3 = x2 + origin[0];
       const y3 = y2 + origin[1];
 
+      if (point.length === 6) {
+        newPoints.push([x3, y3, point[2], point[3], point[4], point[5]]);
+        continue;
+      }
+
       newPoints.push([x3, y3]);
     }
     state.transitionPoints = newPoints;
-    const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null };
+    const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null, bezierLines: [], isBezier: false };
     updateBoundingBox(poly);
     state.transitionBoundingBox = poly.boundingBox;
 

@@ -129,7 +129,7 @@ export default function MainPage() {
 
   const keyDown = (e: any) => {
     const resp = helper.key.down(e.key);
-    if (e.key === 'Delete' || (e.key === 'Backspace' && state.showBoundingBox)) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.showBoundingBox) {
       deleteShape();
     }
     if (resp) {
@@ -145,7 +145,7 @@ export default function MainPage() {
   if (transitionDirection) {
     wrapperClasses.push(transitionDirection);
   }
-  if (isHoveringPoint || state.transitionIntentType === 'move-shape') {
+  if (isHoveringPoint || state.transitionIntentType === 'move-shape' || state.transitionIntentType === 'move-point') {
     wrapperClasses.push('move');
   }
   if (isAddingPoint) {
@@ -171,7 +171,7 @@ export default function MainPage() {
           {shapes.map((shape, idx) => {
             return (
               <li
-                key={shape.id || idx}
+                key={idx}
                 className={`list-item ${idx === selectedShape ? 'list-item--selected' : ''}`}
                 onClick={() => changeShape(idx)}
               >
@@ -265,7 +265,7 @@ export default function MainPage() {
               onMouseLeave={helper.blur}
             >
               {shapes.map((shape, idx) => {
-                if (idx === selectedShape) {
+                if (idx === selectedShape || shape.open) {
                   return null;
                 }
 
@@ -296,23 +296,23 @@ export default function MainPage() {
                   <svg width="100%" height="100%" viewBox={`0 0 ${image.width} ${image.height}`} tabIndex={-1}>
                     <defs>{defs}</defs>
 
-                    {/*{shapes.map((shape, idx) => {*/}
-                    {/*  if (idx === selectedShape) {*/}
-                    {/*    return null;*/}
-                    {/*  }*/}
+                    {shapes.map((shape, idx) => {
+                      if (idx === selectedShape || !shape.open) {
+                        return null;
+                      }
 
-                    {/*  const Shape = shape.open ? 'polyline' : 'polygon';*/}
-                    {/*  return (*/}
-                    {/*    <Shape*/}
-                    {/*      key={idx}*/}
-                    {/*      className="shape"*/}
-                    {/*      onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}*/}
-                    {/*      points={shape.points.map((r) => r.join(',')).join(' ')}*/}
-                    {/*      vectorEffect="non-scaling-stroke"*/}
-                    {/*      style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}*/}
-                    {/*    />*/}
-                    {/*  );*/}
-                    {/*})}*/}
+                      const Shape = 'polyline';
+                      return (
+                        <Shape
+                          key={idx}
+                          className="shape-line"
+                          onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}
+                          points={shape.points.map((r) => r.join(',')).join(' ')}
+                          vectorEffect="non-scaling-stroke"
+                          style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
+                        />
+                      );
+                    })}
 
                     {editor}
                   </svg>

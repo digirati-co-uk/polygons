@@ -13,7 +13,11 @@ export const movePoint: TransitionIntent = {
     //   return false;
     // }
 
-    const threshold = modifiers.proximity * 0.7;
+    if (modifiers.Alt) {
+      return false;
+    }
+
+    const threshold = modifiers.proximity;
 
     const [x, y] = pointers[0];
     const points = state.polygon.points;
@@ -89,10 +93,15 @@ export const movePoint: TransitionIntent = {
 
     for (let i = 0; i < points.length; i++) {
       const selected = selectedPoints.indexOf(i) !== -1;
+      const p = points[i];
       if (selected) {
-        transitionPoints.push([points[i][0] + dx, points[i][1] + dy]);
+        if (p.length === 6) {
+          transitionPoints.push([p[0] + dx, p[1] + dy, p[2], p[3], p[4], p[5]]);
+        } else {
+          transitionPoints.push([p[0] + dx, p[1] + dy]);
+        }
       } else {
-        transitionPoints.push(points[i]);
+        transitionPoints.push(p);
       }
     }
     state.transitionPoints = transitionPoints;

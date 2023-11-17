@@ -124,3 +124,14 @@ ul {
 .shape:hover {
     fill: rgba(119, 24, 196, 0.5);
 }
+
+.shape-line {
+    stroke: rgba(119, 24, 196, 0.25);
+    stroke-width: 3px;
+    fill: none;
+    pointer-events: visible;
+}
+
+.shape-line:hover {
+    stroke: rgba(119, 24, 196, 0.5);
+}

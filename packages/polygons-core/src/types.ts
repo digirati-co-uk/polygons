@@ -16,6 +16,7 @@ export interface RenderState {
   closestLineDistance: number;
   closestLineIndex: number;
   transitionDirection: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
+  transitionBezierLine: null | [Point, Point];
   slowState: SlowState;
   transitionDraw: Point[];
 }
@@ -37,6 +38,7 @@ export interface SlowState {
   closestPoint: null | number;
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;
+  bezierLines: [number, Point, Point][];
 }
 
 export type InputShape = {
