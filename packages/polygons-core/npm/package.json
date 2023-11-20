@@ -1,5 +1,6 @@
 {
-  "name": "polygons",
+  "name": "polygon-editor",
+  "version": "0.0.1",
   "author": "Stephen Fraser <stephen.fraser@digirati.com>",
   "description": "A library for editing polygons, polylines and points",
   "type": "module",
