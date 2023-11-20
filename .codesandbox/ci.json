@@ -1,0 +1,7 @@
+{
+  "packages": [
+    "packages/polygons-core/npm"
+  ],
+  "sandboxes": ["new", "vanilla"],
+  "node": "18"
+}

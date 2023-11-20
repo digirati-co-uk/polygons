@@ -1,0 +1,25 @@
+{
+  "name": "polygons",
+  "author": "Stephen Fraser <stephen.fraser@digirati.com>",
+  "description": "A library for editing polygons, polylines and points",
+  "type": "module",
+  "module": "./index.js",
+  "main": "./index.cjs",
+  "files": [
+    "index.d.mts",
+    "index.d.ts",
+    "index.js",
+    "index.cjs"
+  ],
+  "scripts": {
+    "prepack": "tsup"
+  },
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "contours.ts": "^0.2.2",
+    "tsup": "^8.0.0"
+  }
+}
