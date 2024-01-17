@@ -34,6 +34,7 @@ export const closeShape: ActionIntent = {
   },
   commit(pointers, state, modifiers) {
     const selected = state.selectedPoints[0];
+    state.line = null;
     if (selected === 0) {
       // We need to reverse the points
       return {

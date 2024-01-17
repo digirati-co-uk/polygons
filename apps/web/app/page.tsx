@@ -257,6 +257,8 @@ export default function MainPage() {
           <world>
             <ImageService key={`tile-${tileIndex}`} {...images[tileIndex]} />
             <world-object
+              key={`shapes-${tileIndex}`}
+              id="shapes"
               height={image.height}
               width={image.width}
               onPointerMove={mouseMove}

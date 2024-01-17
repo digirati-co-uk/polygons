@@ -206,11 +206,13 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
         ) : null}
 
         {!state.transitioning &&
-        (state.actionIntentType === 'add-open-point' || state.actionIntentType === 'close-shape') ? (
+        (state.actionIntentType === 'add-open-point' ||
+          state.actionIntentType === 'close-shape' ||
+          state.actionIntentType === 'close-shape-line') ? (
           <polyline
             stroke="#000"
             ref={pointLine}
-            strokeWidth={state.actionIntentType === 'close-shape' ? 2 : 1}
+            strokeWidth={state.actionIntentType !== 'close-shape' ? 1 : 2}
             vectorEffect="non-scaling-stroke"
           />
         ) : null}
