@@ -13,7 +13,7 @@
     "@iiif/helpers": "^1.0.3",
     "contours.ts": "^0.2.2",
     "mitt": "^3.0.1",
-    "next": "^13.4.19",
+    "next": "^13.5.1",
     "polygons-core": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
