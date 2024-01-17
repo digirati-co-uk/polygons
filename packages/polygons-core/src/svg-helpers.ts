@@ -122,7 +122,7 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
 
   function updatePointLine(el: SVGElement | undefined | null, state: RenderState, slowState: SlowState) {
     if (el && state.pointer && state.selectedPoints.length) {
-      if (slowState.actionIntentType === 'close-shape') {
+      if (slowState.actionIntentType === 'close-shape' || slowState.actionIntentType === 'close-shape-line') {
         const firstPoint = state.polygon.points[0];
         const lastPoint = state.polygon.points[state.polygon.points.length - 1];
         if (firstPoint && lastPoint) {

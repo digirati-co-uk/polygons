@@ -19,6 +19,8 @@ import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
 import { deletePoint } from './intents/delete-point';
 import { drawShape } from './intents/draw-shape';
 import { stampShape } from './intents/stamp-shape';
+import { closeShapeLine } from './intents/close-shape-line';
+import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -71,9 +73,10 @@ const transitionIntentsLength = transitionIntents.length;
  * that are triggered by the key manager (keyIntents below)
  */
 const actionIntents = [
-  //
+  stampFixedSizeShape,
   closeShape,
   selectPoint,
+  closeShapeLine,
   cutLine,
   addOpenPoint,
   selectShape,
