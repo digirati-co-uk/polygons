@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@atlas-viewer/atlas": "^2.0.2",
-    "@iiif/helpers": "^1.0.2",
+    "@iiif/helpers": "^1.0.3",
     "contours.ts": "^0.2.2",
     "mitt": "^3.0.1",
     "next": "^13.4.19",
     "polygons-core": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-iiif-vault": "^0.9.21",
+    "react-iiif-vault": "1.0.1",
     "ui": "workspace:*"
   },
   "devDependencies": {
