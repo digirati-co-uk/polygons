@@ -1047,35 +1047,47 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   function toggleLineMode() {
     if (state.slowState.lineMode) {
-      setState({ lineMode: false, lineBoxMode: false });
+      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
     } else {
-      setState({ lineMode: true, lineBoxMode: false });
+      setState({ lineMode: true, lineBoxMode: false, drawMode: false });
     }
   }
 
   function toggleLineBoxMode() {
     if (state.slowState.lineBoxMode) {
       // Turn both off.
-      setState({ lineMode: false, lineBoxMode: false });
+      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
     } else {
-      setState({ lineBoxMode: true, lineMode: true });
+      setState({ lineBoxMode: true, lineMode: true, drawMode: false });
     }
   }
 
   const modes = {
     toggleLineBoxMode,
     toggleLineMode,
+    enableLineMode() {
+      setState({ lineMode: true, lineBoxMode: false, drawMode: false });
+    },
+    disableLineMode() {
+      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
+    },
+    enableLineBoxMode() {
+      setState({ lineMode: true, lineBoxMode: true, drawMode: false });
+    },
+    disableLineBoxMode() {
+      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
+    },
   };
 
   const draw = {
     enable() {
-      setState({ drawMode: true });
+      setState({ drawMode: true, lineMode: false, lineBoxMode: false });
     },
     disable() {
       setState({ drawMode: false });
     },
     toggle() {
-      setState({ drawMode: !state.slowState.drawMode });
+      setState({ drawMode: !state.slowState.drawMode, lineMode: false, lineBoxMode: false });
     },
   };
 
