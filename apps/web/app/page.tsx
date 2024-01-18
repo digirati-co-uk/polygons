@@ -1,13 +1,15 @@
 'use client';
 import { useEffect, useReducer, useState } from 'react';
-import { AtlasAuto, HTMLPortal, ImageService, Runtime } from '@atlas-viewer/atlas';
+import type { Runtime } from '@atlas-viewer/atlas';
+import { AtlasAuto, HTMLPortal, ImageService } from '@atlas-viewer/atlas';
 import { Vault, parseSelector } from '@iiif/helpers';
 import { useSvgEditor } from './_helpers/use-svg-editor';
 import { useLocalStorage } from './_helpers/use-local-storage';
-import { shapeReducer, ShapeState } from './_helpers/shape-reducer';
+import type { ShapeState } from './_helpers/shape-reducer';
+import { shapeReducer } from './_helpers/shape-reducer';
 
-// @ts-ignore
-globalThis['IIIF_VAULT'] = globalThis['IIIF_VAULT'] || new Vault();
+// @ts-expect-error
+globalThis.IIIF_VAULT = globalThis.IIIF_VAULT || new Vault();
 
 const preset = ['default-preset', { runtimeOptions: { maxOverZoom: 5 } }];
 
@@ -66,11 +68,12 @@ export default function MainPage() {
   } = useSvgEditor(
     {
       currentShape,
-      onChange: (newShape) =>
+      onChange: (newShape) => {
         dispatch({
           type: 'update-current-shape',
           shape: newShape,
-        }),
+        });
+      },
       image,
     },
     [selectedShape]
@@ -82,6 +85,14 @@ export default function MainPage() {
 
   const mouseMove = (e: any) => {
     helper.pointer([[~~e.atlas.x, ~~e.atlas.y]]);
+  };
+
+  const toggleLineMode = () => {
+    helper.modes.toggleLineMode();
+  };
+
+  const toggleLineBoxMode = () => {
+    helper.modes.toggleLineBoxMode();
   };
 
   const addShape = () => {
@@ -164,16 +175,24 @@ export default function MainPage() {
   const selectedButton = { background: 'blue', color: '#fff' };
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }} onKeyDown={keyDown} onKeyUp={(e) => helper.key.up(e.key)}>
+    <div
+      onKeyDown={keyDown}
+      onKeyUp={(e) => {
+        helper.key.up(e.key);
+      }}
+      style={{ display: 'flex', height: '100vh' }}
+    >
       <div style={{ width: 400, background: '#fff', padding: 20, overflowY: 'auto', maxWidth: 400 }}>
         <h1>POLYGONS</h1>
         <ul>
           {shapes.map((shape, idx) => {
             return (
               <li
-                key={idx}
                 className={`list-item ${idx === selectedShape ? 'list-item--selected' : ''}`}
-                onClick={() => changeShape(idx)}
+                key={idx}
+                onClick={() => {
+                  changeShape(idx);
+                }}
               >
                 <div className="poly-thumb">
                   <svg viewBox={`0 0 ${image.width} ${image.height}`}>
@@ -183,7 +202,13 @@ export default function MainPage() {
                 <h3>Shape {idx + 1}</h3>
                 {selectedShape === idx ? (
                   <div>
-                    <button onClick={() => deleteShape()}>Delete</button>
+                    <button
+                      onClick={() => {
+                        deleteShape();
+                      }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ) : null}
               </li>
@@ -192,48 +217,60 @@ export default function MainPage() {
         </ul>
         <button onClick={addShape}>Add shape</button>
         <button onClick={deselectShape}>Deselect shape</button>
+        <button onClick={toggleLineMode}>{state.lineMode ? 'disable' : 'enable'} Line mode</button>
+        <button onClick={toggleLineBoxMode}>{state.lineBoxMode ? 'disable' : 'enable'} Line box mode</button>
         <hr />
         <button
-          disabled={!!state.selectedStamp || !showShapes || state.drawMode}
-          onClick={() => helper.draw.enable()}
-          style={!state.selectedStamp && showShapes && state.drawMode ? selectedButton : undefined}
+          disabled={state.lineMode || Boolean(state.selectedStamp) || !showShapes || state.drawMode}
+          onClick={() => {
+            helper.draw.enable();
+          }}
+          style={!state.lineMode && !state.selectedStamp && showShapes && state.drawMode ? selectedButton : undefined}
         >
           Draw mode
         </button>
         <button
-          disabled={!!state.selectedStamp || !showShapes || !state.drawMode}
-          onClick={() => helper.draw.disable()}
-          style={!state.selectedStamp && showShapes && !state.drawMode ? selectedButton : undefined}
+          disabled={state.lineMode || Boolean(state.selectedStamp) || !showShapes || !state.drawMode}
+          onClick={() => {
+            helper.draw.disable();
+          }}
+          style={!state.lineMode && !state.selectedStamp && showShapes && !state.drawMode ? selectedButton : undefined}
         >
-          Line mode
+          Shape mode
         </button>
         <div>
           <hr />
           <button onClick={clearStamp}>None</button>
           <button
-            onClick={addStamp}
             disabled={!showShapes}
+            onClick={addStamp}
             style={state.selectedStamp?.id === 'custom' ? selectedButton : undefined}
           >
             Custom
           </button>
           <button
-            onClick={() => helper.stamps.triangle()}
             disabled={!showShapes}
+            onClick={() => {
+              helper.stamps.triangle();
+            }}
             style={state.selectedStamp?.id === 'triangle' ? selectedButton : undefined}
           >
             Triangle
           </button>
           <button
-            onClick={() => helper.stamps.square()}
             disabled={!showShapes}
+            onClick={() => {
+              helper.stamps.square();
+            }}
             style={state.selectedStamp?.id === 'square' ? selectedButton : undefined}
           >
             Square
           </button>
           <button
-            onClick={() => helper.stamps.hexagon()}
             disabled={!showShapes}
+            onClick={() => {
+              helper.stamps.hexagon();
+            }}
             style={state.selectedStamp?.id === 'hexagon' ? selectedButton : undefined}
           >
             Hexagon
@@ -249,22 +286,24 @@ export default function MainPage() {
       </div>
       <div className={wrapperClasses.join(' ')} style={{ flex: 1, alignContent: 'stretch', display: 'flex' }}>
         <AtlasAuto
-          onCreated={(rt) => setRuntime(rt.runtime)}
-          mode={currentShape ? 'sketch' : 'explore'}
-          renderPreset={preset as any}
           containerStyle={{ height: '100%', width: '100%', flex: 1 }}
+          mode={currentShape ? 'sketch' : 'explore'}
+          onCreated={(rt) => {
+            setRuntime(rt.runtime);
+          }}
+          renderPreset={preset as any}
         >
           <world>
             <ImageService key={`tile-${tileIndex}`} {...images[tileIndex]} />
             <world-object
-              key={`shapes-${tileIndex}`}
-              id="shapes"
               height={image.height}
-              width={image.width}
-              onPointerMove={mouseMove}
+              id="shapes"
+              key={`shapes-${tileIndex}`}
               onMouseDown={helper.pointerDown}
-              onMouseUp={helper.pointerUp}
               onMouseLeave={helper.blur}
+              onMouseUp={helper.pointerUp}
+              onPointerMove={mouseMove}
+              width={image.width}
             >
               {shapes.map((shape, idx) => {
                 if (idx === selectedShape || shape.open) {
@@ -275,11 +314,11 @@ export default function MainPage() {
                 return (
                   <Shape
                     id={`shape-${idx}`}
+                    points={shape.points}
+                    target={{ x: 0, y: 0, width: image.width, height: image.height }}
                     key={idx}
                     // className="shape"
                     onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}
-                    points={shape.points}
-                    target={{ x: 0, y: 0, width: image.width, height: image.height }}
                     style={
                       {
                         backgroundColor: 'rgba(119, 24, 196, 0.25)',
@@ -293,9 +332,9 @@ export default function MainPage() {
                   />
                 );
               })}
-              <HTMLPortal relative={true} interactive={false}>
+              <HTMLPortal interactive={false} relative>
                 <div style={{ position: 'absolute', top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <svg width="100%" height="100%" viewBox={`0 0 ${image.width} ${image.height}`} tabIndex={-1}>
+                  <svg height="100%" tabIndex={-1} viewBox={`0 0 ${image.width} ${image.height}`} width="100%">
                     <defs>{defs}</defs>
 
                     {shapes.map((shape, idx) => {
@@ -306,12 +345,18 @@ export default function MainPage() {
                       const Shape = 'polyline';
                       return (
                         <Shape
-                          key={idx}
                           className="shape-line"
-                          onClick={state.transitioning || currentShape?.open ? undefined : () => changeShape(idx)}
+                          key={idx}
+                          onClick={
+                            state.transitioning || currentShape?.open
+                              ? undefined
+                              : () => {
+                                  changeShape(idx);
+                                }
+                          }
                           points={shape.points.map((r) => r.join(',')).join(' ')}
-                          vectorEffect="non-scaling-stroke"
                           style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
+                          vectorEffect="non-scaling-stroke"
                         />
                       );
                     })}

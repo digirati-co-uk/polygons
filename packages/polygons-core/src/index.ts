@@ -21,6 +21,8 @@ import { drawShape } from './intents/draw-shape';
 import { stampShape } from './intents/stamp-shape';
 import { closeShapeLine } from './intents/close-shape-line';
 import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
+import { moveLine } from './intents/move-line';
+import { closeLineBox } from './intents/close-line-box';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -55,6 +57,7 @@ const transitionIntents = [
   stampShape,
   boundingBoxCorners,
   movePoint,
+  moveLine,
   splitLine,
   moveShape,
   translateBoundingBox,
@@ -73,6 +76,7 @@ const transitionIntentsLength = transitionIntents.length;
  * that are triggered by the key manager (keyIntents below)
  */
 const actionIntents = [
+  closeLineBox,
   stampFixedSizeShape,
   closeShape,
   selectPoint,
@@ -136,6 +140,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     closestPoint: null,
     transitionModifiers: null,
     selectedStamp: null,
+    lineMode: false,
+    lineBoxMode: false,
     drawMode: false,
     bezierLines: [],
   };
@@ -154,6 +160,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     selectedPoints: [],
     pointer: null,
     line: null,
+    lineBox: null,
     transitionPoints: null,
     transitionOrigin: null,
     transitionBoundingBox: null,
@@ -250,6 +257,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     updateShapeIntersection();
     updateCurrentIntent();
     calculateLine();
+    calculateLineBox();
 
     // Then the render function from the user last, once the state is updated.
     internals.renderFunc(state, state.slowState, delta);
@@ -436,7 +444,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
     const proximityDistance = getProximity() * getProximity();
 
-    if (distance < proximityDistance && (!state.isOpen || state.polygon.points.length - 1 !== prevIdx)) {
+    if (
+      distance < proximityDistance &&
+      (!state.isOpen || state.slowState.lineMode || state.polygon.points.length - 1 !== prevIdx)
+    ) {
       state.closestLinePoint = intersection;
       state.closestLineDistance = Math.sqrt(distance);
       state.closestLineIndex = prevIdx;
@@ -511,6 +522,38 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       }
     }
     setState({ validIntentKeys: keyMap });
+  }
+
+  function calculateLineBox() {
+    // This is a box that is extended from 2 points.
+    const pointer = state.pointer;
+    state.lineBox = null;
+    if (!pointer || isDrawing()) return;
+    if (state.polygon.points.length !== 2) return;
+
+    // Now we have the line, we need to extend it to a box.
+    // lineBox = [Point, Point, Point, Point]
+    const [x, y] = pointer;
+    const [x1, y1] = state.polygon.points[0];
+    const [x2, y2] = state.polygon.points[1];
+
+    // Line is the line from the closest line (there is only one) to the pointer.
+    const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, pointer);
+    if (!intersection) return;
+
+    // How far along the intersection is the pointer?
+    const dx = x - intersection[0];
+    const dy = y - intersection[1];
+
+    // New rectangle is A, B, C, D
+    const a = [x1, y1] as Point;
+    const b = [x2, y2] as Point;
+
+    // C is tangential to A
+    const c = [b[0] + dx, b[1] + dy] as Point;
+    const d = [a[0] + dx, a[1] + dy] as Point;
+
+    state.lineBox = [a, b, c, d];
   }
 
   function calculateLine() {
@@ -949,6 +992,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     internals.nextSlowState = null;
     internals.undoStack = [];
     internals.undoStackPointer = -1;
+    state.lineBox = null;
+    state.line = null;
     if (pointerState.pressTimeout) {
       clearTimeout(pointerState.pressTimeout);
     }
@@ -974,6 +1019,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       drawMode: false,
       closestPoint: null,
       pointerInsideShape: false,
+      lineBoxMode: false,
+      lineMode: false,
     });
     flushSetState();
   }
@@ -997,6 +1044,28 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
     return intent.label;
   }
+
+  function toggleLineMode() {
+    if (state.slowState.lineMode) {
+      setState({ lineMode: false, lineBoxMode: false });
+    } else {
+      setState({ lineMode: true, lineBoxMode: false });
+    }
+  }
+
+  function toggleLineBoxMode() {
+    if (state.slowState.lineBoxMode) {
+      // Turn both off.
+      setState({ lineMode: false, lineBoxMode: false });
+    } else {
+      setState({ lineBoxMode: true, lineMode: true });
+    }
+  }
+
+  const modes = {
+    toggleLineBoxMode,
+    toggleLineMode,
+  };
 
   const draw = {
     enable() {
@@ -1023,6 +1092,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     pointerDown,
     pointerUp,
     setShape,
+    modes,
     label,
   };
 }

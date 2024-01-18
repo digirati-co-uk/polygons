@@ -1,5 +1,4 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import { ActionIntent } from '../types';
 import { closeShape } from './close-shape';
 
 export const closeShapeLine: ActionIntent = {
@@ -18,7 +17,6 @@ export const closeShapeLine: ActionIntent = {
     }
 
     if (!state.closestLinePoint || state.closestLineDistance >= modifiers.proximity) {
-      console.log('A');
       return false;
     }
 
@@ -26,8 +24,6 @@ export const closeShapeLine: ActionIntent = {
     if (state.closestLineIndex === 0 || state.closestLineIndex === state.polygon.points.length - 2) {
       return true;
     }
-
-    console.log('B', state.closestLineIndex, state.polygon.points.length - 2);
 
     // Then we are.
     return true;
