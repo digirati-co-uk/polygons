@@ -41,12 +41,14 @@ export const translateBoundingBox: TransitionIntent = {
       }
       return [point[0] + dx, point[1] + dy];
     });
-    state.transitionBoundingBox = {
-      x: box.x + dx,
-      y: box.y + dy,
-      width: box.width,
-      height: box.height,
-    };
+    if (box) {
+      state.transitionBoundingBox = {
+        x: box.x + dx,
+        y: box.y + dy,
+        width: box.width,
+        height: box.height,
+      };
+    }
   },
 
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {

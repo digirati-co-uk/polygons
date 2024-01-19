@@ -6,6 +6,7 @@ export interface RenderState {
   polygon: Polygon;
   selectedPoints: Array<number>;
   transitionPoints: Array<Point> | null;
+  lineBox: null | [Point, Point, Point, Point];
   line: null | [Point, Point];
   transitionOrigin: null | Point;
   transitionBoundingBox: null | { x: number; y: number; width: number; height: number; rotation?: number };
@@ -39,6 +40,8 @@ export interface SlowState {
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;
   bezierLines: [number, Point, Point][];
+  lineMode: boolean;
+  lineBoxMode: boolean;
 }
 
 export type InputShape = {

@@ -157,6 +157,12 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
     }
   }
 
+  function updateLineBox(el: SVGElement | undefined | null, state: RenderState) {
+    if (el && state.lineBox) {
+      el.setAttribute('points', state.lineBox.map((p) => p.join(',')).join(' '));
+    }
+  }
+
   return {
     updateTransitionBoundingBox,
     updateClosestLinePointTransform,
@@ -167,5 +173,6 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
     updateSelectBox,
     updatePointLine,
     updateDrawPreview,
+    updateLineBox,
   };
 }

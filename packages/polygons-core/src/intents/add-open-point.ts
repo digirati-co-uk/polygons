@@ -18,6 +18,10 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
+    if (state.polygon.points.length >= 2 && state.slowState.lineMode) {
+      return false;
+    }
+
     const selected = state.selectedPoints[0];
     return selected === 0 || selected === state.polygon.points.length - 1;
   },
@@ -42,7 +46,7 @@ export const addOpenPoint: ActionIntent = {
 
     if (selected === 0) {
       return {
-        selectedPoints: [0],
+        selectedPoints: state.slowState.lineMode ? [] : [0],
         points: [pointer, ...currentPoints],
       };
     }
@@ -50,7 +54,7 @@ export const addOpenPoint: ActionIntent = {
     state.line = null;
 
     return {
-      selectedPoints: [currentPoints.length],
+      selectedPoints: state.slowState.lineMode ? [] : [currentPoints.length],
       points: [...currentPoints, pointer],
     };
   },

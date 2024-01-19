@@ -5,7 +5,7 @@ export const splitLine: TransitionIntent = {
   type: 'split-line',
   label: 'Split line',
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
-    if (modifiers.Meta) {
+    if (modifiers.Meta || state.slowState.lineMode) {
       return false;
     }
     // if (!state.isOpen) return false;
