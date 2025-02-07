@@ -5,7 +5,7 @@ export const closeLineBox: ActionIntent = {
   label: 'Close Line Box',
   trigger: { type: 'click' },
   isValid(pointers, state, modifiers) {
-    return state.slowState.lineBoxMode === true && state.polygon.points.length === 2 && state.lineBox !== null;
+    return state.slowState.lineBoxMode === true && state.polygon.points.length === 2 && state.lineBox !== null && state.slowState.boxMode === false;
   },
 
   commit(pointers, state, modifiers) {

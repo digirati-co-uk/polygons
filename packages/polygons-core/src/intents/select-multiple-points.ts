@@ -7,6 +7,9 @@ export const selectMultiplePoints: TransitionIntent = {
     if (state.slowState.lineMode && state.polygon.points.length >= 2) {
       return true;
     }
+    if (state.slowState.boxMode) {
+      return false;
+    }
     if (state.line) {
       return false;
     }

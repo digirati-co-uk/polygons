@@ -10,6 +10,9 @@ export const cutLine: ActionIntent = {
     Shift: 'Cut line',
   },
   isValid(pointers, state, modifiers) {
+    if (state.slowState.boxMode) {
+      return false;
+    }
     return splitLine.isValid(pointers, state, modifiers);
   },
   commit(pointers, state, modifiers) {

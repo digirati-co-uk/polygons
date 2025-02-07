@@ -8,7 +8,7 @@ export function useHelper(
 ) {
   const [state, setState] = useState<SlowState>({} as any);
   const helper = useMemo(() => {
-    return createHelper(data, commitShape);
+    return createHelper({ ...(data || {}), }, commitShape);
   }, []);
 
   useEffect(() => {

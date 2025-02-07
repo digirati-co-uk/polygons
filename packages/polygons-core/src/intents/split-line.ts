@@ -8,6 +8,9 @@ export const splitLine: TransitionIntent = {
     if (modifiers.Meta || state.slowState.lineMode) {
       return false;
     }
+    if (state.slowState.boxMode) {
+      return false;
+    }
     // if (!state.isOpen) return false;
 
     // Are we within X pixels of a line

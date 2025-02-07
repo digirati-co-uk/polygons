@@ -1,5 +1,6 @@
 import { Modifiers, RenderState, TransitionIntent } from '../types';
 import { closestVertex, Point } from '../polygon';
+import { boundingBoxCorners } from './bounding-box-corners';
 
 export const movePoint: TransitionIntent = {
   type: 'move-point',
@@ -12,7 +13,6 @@ export const movePoint: TransitionIntent = {
     // if (state.selectedPoints.length === 0) {
     //   return false;
     // }
-
     if (modifiers.Alt) {
       return false;
     }
@@ -46,6 +46,9 @@ export const movePoint: TransitionIntent = {
     return false;
   },
   start(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+    if (state.slowState.boxMode) {
+      return boundingBoxCorners.start(pointers, state, modifiers)
+    }
     if (state.selectedPoints.length < 2) {
       // We select the closest point.
       const [a, b, idx] = closestVertex(state.polygon, pointers[0]);
@@ -65,6 +68,9 @@ export const movePoint: TransitionIntent = {
     }
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+    if (state.slowState.boxMode) {
+      return boundingBoxCorners.transition(pointers, state, modifiers)
+    }
     // Translate the selected points
     const starting = state.transitionOrigin!;
     const [x, y] = pointers[0];
@@ -107,6 +113,9 @@ export const movePoint: TransitionIntent = {
     state.transitionPoints = transitionPoints;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+    if (state.slowState.boxMode) {
+      return boundingBoxCorners.commit(pointers, state, modifiers)
+    }
     const newPoints = state.transitionPoints!;
 
     state.transitionPoints = null;

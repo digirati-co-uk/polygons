@@ -40,8 +40,12 @@ export interface SlowState {
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;
   bezierLines: [number, Point, Point][];
+
+  // Modes.
   lineMode: boolean;
   lineBoxMode: boolean;
+  boxMode: boolean;
+  fixedAspectRatio: boolean;
 }
 
 export type InputShape = {

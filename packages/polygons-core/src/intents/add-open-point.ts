@@ -10,6 +10,10 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
+    if (state.slowState.boxMode) {
+      return false;
+    }
+
     if (state.polygon.points.length === 0) {
       return true;
     }

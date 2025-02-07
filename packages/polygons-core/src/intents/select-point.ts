@@ -22,6 +22,9 @@ export const selectPoint: ActionIntent = {
         skipIndex = 0;
       }
     }
+    if (state.slowState.boxMode) {
+      return false;
+    }
 
     const [x, y] = pointers[0];
     const points = state.polygon.points;

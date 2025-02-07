@@ -9,6 +9,9 @@ export const deletePoint: ActionIntent = {
     // if (!state.isOpen) {
     //   return false;
     // }
+    if (state.slowState.boxMode) {
+      return false;
+    }
 
     return state.selectedPoints.length > 0;
   },

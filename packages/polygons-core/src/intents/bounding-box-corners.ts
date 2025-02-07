@@ -60,7 +60,9 @@ export const boundingBoxCorners: TransitionIntent = {
     const minDistance = Math.min(...distances);
     if (distances[0] < proximity || distances[1] < proximity || distances[2] < proximity || distances[3] < proximity) {
       if (minDistance > modifiers.proximity || modifiers.Meta) {
-        state.transitionRotate = true;
+        if (!state.slowState.boxMode) {
+          state.transitionRotate = true;
+        }
       }
       const index = distances.indexOf(Math.min(...distances));
       state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
@@ -91,7 +93,7 @@ export const boundingBoxCorners: TransitionIntent = {
     const index = distances.indexOf(minDistance);
     state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
 
-    if (minDistance > modifiers.proximity) {
+    if (minDistance > modifiers.proximity && !state.slowState.boxMode) {
       state.transitionRotate = true;
     }
   },
@@ -102,7 +104,7 @@ export const boundingBoxCorners: TransitionIntent = {
     const start = state.transitionOrigin || pointers[0];
     const [x, y] = pointers[0];
 
-    if (modifiers.Meta || state.transitionRotate) {
+    if ((modifiers.Meta || state.transitionRotate) && !state.slowState.boxMode) {
       origin = [box.x + box.width / 2, box.y + box.height / 2];
       // Rotation.
       const startAngle = Math.atan2(start[1] - origin[1], start[0] - origin[0]);
@@ -179,7 +181,7 @@ export const boundingBoxCorners: TransitionIntent = {
       dy *= 2;
     }
 
-    if (modifiers.Shift) {
+    if (modifiers.Shift || state.slowState.fixedAspectRatio) {
       // Maintain aspect ratio.
       const aspect = box.width / box.height;
       if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {

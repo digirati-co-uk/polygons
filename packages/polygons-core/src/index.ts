@@ -23,6 +23,7 @@ import { closeShapeLine } from './intents/close-shape-line';
 import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
 import { moveLine } from './intents/move-line';
 import { closeLineBox } from './intents/close-line-box';
+import * as shapes from './shapes';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -34,6 +35,8 @@ interface CreateHelperInput {
   id?: string;
   open: boolean;
   points: Array<Point>;
+  mode?: 'line' | 'box' | 'linebox' | 'draw' | 'polygon';
+  fixedAspectRatio?: boolean;
 }
 
 /**
@@ -115,9 +118,11 @@ keyIntents.forEach((i) => {
   intentMap[i.type] = i;
 });
 
-const BASE_PROXIMITY = 20;
+const BASE_PROXIMITY = 10;
 
 export function createHelper(input: CreateHelperInput | null, onSave: (input: CreateHelperInput) => void) {
+  const initialMode = input?.mode || 'polygon';
+  const fixedAspectRatio = input?.fixedAspectRatio || false;
   // This state will not change frequently.
   const slowState: SlowState = {
     shapeId: input?.id || null,
@@ -133,17 +138,19 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       Meta: false,
       proximity: BASE_PROXIMITY, // default value.
     },
-    showBoundingBox: false,
+    showBoundingBox: initialMode === 'box' && input?.points?.length !== 0,
     currentModifiers: {},
     validIntentKeys: {},
     pointerInsideShape: false,
     closestPoint: null,
     transitionModifiers: null,
-    selectedStamp: null,
-    lineMode: false,
-    lineBoxMode: false,
-    drawMode: false,
+    selectedStamp: initialMode === 'box' ? shapes.square : null,
+    lineMode: initialMode === 'line',
+    lineBoxMode: initialMode === 'linebox',
+    boxMode: initialMode === 'box',
+    drawMode: initialMode === 'draw',
     bezierLines: [],
+    fixedAspectRatio,
   };
 
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -181,8 +188,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     time: 0,
     shouldUpdate: false,
     nextSlowState: null as SlowState | null,
-    renderFunc: (() => {}) as RenderFunc,
-    setStateFunc: (() => {}) as SetState,
+    renderFunc: (() => { }) as RenderFunc,
+    setStateFunc: (() => { }) as SetState,
     animationFrame: 0,
     actionIntent: null as ActionIntent | null,
     transitionIntent: null as TransitionIntent | null,
@@ -709,70 +716,28 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   const stamps = {
     set(selectedStamp: InputShape | null) {
+      if (state.slowState.boxMode && selectedStamp && (selectedStamp.id !== 'square' && selectedStamp.id !== 'rectangle')) {
+        return;
+      }
       setState({ selectedStamp });
     },
     clear() {
-      setState({ selectedStamp: null });
+      stamps.set(null);
     },
     square() {
-      setState({
-        selectedStamp: {
-          id: 'square',
-          open: false,
-          points: [
-            [0, 0],
-            [0, 100],
-            [100, 100],
-            [100, 0],
-          ],
-        },
-      });
+      stamps.set(shapes.square);
     },
     triangle() {
-      setState({
-        selectedStamp: {
-          id: 'triangle',
-          open: false,
-          // Equilateral triangle (pyramid)
-          points: [
-            [50, 0],
-            [0, 100],
-            [100, 100],
-          ],
-        },
-      });
+      stamps.set(shapes.triangle);
     },
     pentagon() {
-      setState({
-        selectedStamp: {
-          id: 'pentagon',
-          open: false,
-          points: [
-            [0, 0],
-            [0, 100],
-            [100, 100],
-            [100, 0],
-            [50, -50],
-          ],
-        },
-      });
+      stamps.set(shapes.pentagon);
     },
     hexagon() {
-      setState({
-        selectedStamp: {
-          id: 'hexagon',
-          open: false,
-          // Equilateral hexagon
-          points: [
-            [0, 0],
-            [0, 100],
-            [50, 150],
-            [100, 100],
-            [100, 0],
-            [50, -50],
-          ],
-        },
-      });
+      stamps.set(shapes.hexagon);
+    },
+    circle() {
+      stamps.set(shapes.circle);
     },
   };
 
@@ -1015,12 +980,14 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       showBoundingBox: false,
       currentModifiers: {},
       validIntentKeys: {},
-      selectedStamp: null,
-      drawMode: false,
+      selectedStamp: initialMode === 'box' ? shapes.square : null,
       closestPoint: null,
       pointerInsideShape: false,
-      lineBoxMode: false,
-      lineMode: false,
+      lineMode: initialMode === 'line',
+      lineBoxMode: initialMode === 'linebox',
+      boxMode: initialMode === 'box',
+      drawMode: initialMode === 'draw',
+      fixedAspectRatio,
     });
     flushSetState();
   }
@@ -1062,6 +1029,28 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     }
   }
 
+  function toggleBoxMode() {
+    if (state.slowState.boxMode) {
+      setState({ boxMode: false, lineBoxMode: false, lineMode: false });
+      stamps.clear();
+    } else {
+      setState({
+        boxMode: true,
+        lineBoxMode: false,
+        lineMode: false,
+      });
+      stamps.square();
+    }
+  }
+
+  function lockAspectRatio() {
+    setState({ fixedAspectRatio: true });
+  }
+
+  function unlockAspectRatio() {
+    setState({ fixedAspectRatio: false });
+  }
+
   const modes = {
     toggleLineBoxMode,
     toggleLineMode,
@@ -1077,6 +1066,21 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     disableLineBoxMode() {
       setState({ lineMode: false, lineBoxMode: false, drawMode: false });
     },
+    enableBoxMode() {
+      setState({
+        boxMode: true,
+        lineBoxMode: false,
+        lineMode: false,
+      });
+      stamps.square();
+    },
+    disableBoxMode() {
+      setState({ boxMode: false, lineBoxMode: false, lineMode: false });
+      stamps.clear();
+    },
+    toggleBoxMode,
+    lockAspectRatio,
+    unlockAspectRatio,
   };
 
   const draw = {
@@ -1091,11 +1095,23 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     },
   };
 
+  const history = {
+    undo,
+    redo,
+    get canUndo() {
+      return internals.undoStackPointer > -1;
+    },
+    get canRedo() {
+      return internals.undoStackPointer < internals.undoStack.length - 1;
+    },
+  };
+
   return {
     draw,
     state,
     modifiers,
     stamps,
+    history,
     key,
     setScale,
     clock,

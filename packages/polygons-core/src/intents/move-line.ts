@@ -8,6 +8,9 @@ export const moveLine: TransitionIntent = {
     if (!state.slowState.lineMode) {
       return false;
     }
+    if (state.slowState.boxMode) {
+      return false;
+    }
 
     if (state.closestLinePoint && state.closestLineDistance < modifiers.proximity) {
       return true;

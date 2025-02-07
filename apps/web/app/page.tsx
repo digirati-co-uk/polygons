@@ -95,6 +95,10 @@ export default function MainPage() {
     helper.modes.toggleLineBoxMode();
   };
 
+  const toggleBoxMode = () => {
+    helper.modes.toggleBoxMode();
+  };
+
   const addShape = () => {
     dispatch({ type: 'add-shape' });
   };
@@ -219,6 +223,7 @@ export default function MainPage() {
         <button onClick={deselectShape}>Deselect shape</button>
         <button onClick={toggleLineMode}>{state.lineMode ? 'disable' : 'enable'} Line mode</button>
         <button onClick={toggleLineBoxMode}>{state.lineBoxMode ? 'disable' : 'enable'} Line box mode</button>
+        <button onClick={toggleBoxMode}>{state.boxMode ? 'disable' : 'enable'} Box mode</button>
         <hr />
         <button
           disabled={state.lineMode || Boolean(state.selectedStamp) || !showShapes || state.drawMode}
@@ -275,6 +280,15 @@ export default function MainPage() {
           >
             Hexagon
           </button>
+          <button
+            disabled={!showShapes}
+            onClick={() => {
+              helper.stamps.circle();
+            }}
+            style={state.selectedStamp?.id === 'circle' ? selectedButton : undefined}
+          >
+            Circle
+          </button>
         </div>
 
         <hr />
@@ -327,8 +341,8 @@ export default function MainPage() {
                         },
                       } as any
                     }
-                    // vectorEffect="non-scaling-stroke"
-                    // style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
+                  // vectorEffect="non-scaling-stroke"
+                  // style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
                   />
                 );
               })}
@@ -351,8 +365,8 @@ export default function MainPage() {
                             state.transitioning || currentShape?.open
                               ? undefined
                               : () => {
-                                  changeShape(idx);
-                                }
+                                changeShape(idx);
+                              }
                           }
                           points={shape.points.map((r) => r.join(',')).join(' ')}
                           style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}

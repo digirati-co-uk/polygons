@@ -10,6 +10,9 @@ export const closeShapeLine: ActionIntent = {
     if (!state.isOpen) {
       return false;
     }
+    if (state.slowState.boxMode) {
+      return false;
+    }
 
     // Not enough lines to close.
     if (state.polygon.points.length < 3) {
