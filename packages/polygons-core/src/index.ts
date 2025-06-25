@@ -1705,7 +1705,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   /**
    * Runs a diagnostic test on the tool system and returns a string with the results
-   * This is useful for debugging and validating that tool switching works correctly
+   * This is useful for debugging and validating that tool switching works correctly.
    */
   function testToolSystem() {
     // Test switching between tools
