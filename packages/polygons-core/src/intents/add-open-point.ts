@@ -1,16 +1,13 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent, Modifiers, RenderState } from '../types';
 
 export const addOpenPoint: ActionIntent = {
   type: 'add-open-point',
   label: 'Add point',
+  tools: ['pen', 'line'],
   trigger: { type: 'click' },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (!state.isOpen) {
-      return false;
-    }
-
-    if (state.slowState.boxMode) {
       return false;
     }
 
@@ -22,7 +19,7 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
-    if (state.polygon.points.length >= 2 && state.slowState.lineMode) {
+    if (state.polygon.points.length >= 2 && state.slowState.tools.line) {
       return false;
     }
 

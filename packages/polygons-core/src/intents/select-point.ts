@@ -1,5 +1,5 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent, Modifiers, RenderState } from '../types';
 import { selectMultiplePoints } from './select-multiple-points';
 
 const threshold = 10;
@@ -8,6 +8,7 @@ export const selectPoint: ActionIntent = {
   type: 'select-point',
   label: 'Select point',
   trigger: { type: 'click' },
+  tools: ['pointer', 'pen', 'line'],
   modifiers: {
     Shift: 'Add to selection',
   },

@@ -1,9 +1,10 @@
-import { ActionIntent } from '../types';
 import { distance } from '../math';
+import type { ActionIntent } from '../types';
 
 export const closeShape: ActionIntent = {
   type: 'close-shape',
   label: 'Close shape',
+  tools: ['pen', 'line'],
   trigger: { type: 'click' },
   isValid(pointers, state, modifiers) {
     if (!state.isOpen) {

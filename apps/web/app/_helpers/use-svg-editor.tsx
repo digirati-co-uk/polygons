@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import type { InputShape, RenderState, SlowState } from 'polygons-core';
-import { createSvgHelpers } from 'polygons-core';
 import { parseSelector } from '@iiif/helpers';
+import type { InputShape, RenderState, SlowState, ValidTools } from 'polygons-core';
+import { createSvgHelpers } from 'polygons-core';
+import { useEffect, useRef, useState } from 'react';
 import { useHelper } from './use-helper';
 
 const svgHelpers = createSvgHelpers();
@@ -24,6 +24,7 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
   const pointLine = useRef<any>();
   const [transitionDirection, setTransitionDirection] = useState<string | null>(null);
   const [transitionRotate, setTransitionRotate] = useState<boolean>(false);
+  const [currentTool, setCurrentTool] = useState<ValidTools>('pointer');
   const { helper, state } = useHelper(
     currentShape,
     (state: RenderState, slowState: SlowState) => {
@@ -38,12 +39,28 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
       setTransitionDirection(state.transitionDirection);
       setTransitionRotate(state.transitionRotate);
     },
-    onChange
+    onChange,
   );
 
   useEffect(() => {
     helper.setShape(currentShape || null);
   }, deps);
+
+  // Keep track of current tool changes
+  useEffect(() => {
+    setCurrentTool(state.currentTool || 'pointer');
+
+    // Subscribe to tool changes
+    const checkToolChange = () => {
+      if (state.currentTool !== currentTool) {
+        setCurrentTool(state.currentTool || 'pointer');
+      }
+    };
+
+    // Check for tool changes on each render cycle
+    const intervalId = setInterval(checkToolChange, 100);
+    return () => clearInterval(intervalId);
+  }, [state.currentTool, currentTool]);
 
   useEffect(() => {
     const windowBlur = () => {
@@ -115,7 +132,7 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
           image.width
         } ${image.height}"><g><polygon points="${helper.state.polygon.points
           .map((r) => r.join(','))
-          .join(' ')}" /></g></svg>`
+          .join(' ')}" /></g></svg>`,
       );
       e.preventDefault();
     };
@@ -305,5 +322,6 @@ export function useSvgEditor(options: SvgEditorOptions, deps: any[]) {
     transitionRotate,
     defs,
     editor,
+    currentTool,
   };
 }

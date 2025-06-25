@@ -1,10 +1,11 @@
-import { Modifiers, RenderState, TransitionIntent } from '../types';
 import { distance } from '../math';
-import { Point, Polygon, updateBoundingBox } from '../polygon';
+import { type Point, type Polygon, updateBoundingBox } from '../polygon';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const boundingBoxCorners: TransitionIntent = {
   type: 'bounding-box-corners',
   label: 'Drag to resize',
+  tools: ['pointer', 'box'],
   modifiers: {
     Shift: 'Maintain aspect ratio',
     Alt: 'Scale from center',
@@ -24,7 +25,7 @@ export const boundingBoxCorners: TransitionIntent = {
 
     // This is when the modifier key is used.
     // const proximity = modifiers.Meta ? modifiers.proximity * 2 : modifiers.proximity;
-    const proximity = modifiers.proximity * 3;
+    const proximity = modifiers.proximity * 5;
 
     // Types
     // - Scale from opposite corner
@@ -51,6 +52,12 @@ export const boundingBoxCorners: TransitionIntent = {
     const soutWest: Point = [box.x, box.y + box.height];
 
     const choice = ['ne', 'nw', 'se', 'sw'];
+    const choices = {
+      ne: northEast,
+      nw: northWest,
+      se: southEast,
+      sw: soutWest,
+    };
     const distances = [
       distance(pointers[0], northEast),
       distance(pointers[0], northWest),
@@ -58,15 +65,33 @@ export const boundingBoxCorners: TransitionIntent = {
       distance(pointers[0], soutWest),
     ];
     const minDistance = Math.min(...distances);
-    if (distances[0] < proximity || distances[1] < proximity || distances[2] < proximity || distances[3] < proximity) {
-      if (minDistance > modifiers.proximity || modifiers.Meta) {
-        if (!state.slowState.boxMode) {
-          state.transitionRotate = true;
-        }
-      }
-      const index = distances.indexOf(Math.min(...distances));
-      state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
+    const index = distances.indexOf(minDistance);
+    const transitionDirection = index === -1 ? null : choice[index];
+    const distanceItem = transitionDirection ? (choices as any)[transitionDirection as any] : null;
 
+    if (distances[0] < proximity || distances[1] < proximity || distances[2] < proximity || distances[3] < proximity) {
+      if (transitionDirection) {
+        const [x, y] = point;
+        if (
+          modifiers.Meta ||
+          (x >= distanceItem[0] - modifiers.proximity * 4 &&
+            y >= distanceItem[1] - modifiers.proximity * 4 &&
+            x <= distanceItem[0] + modifiers.proximity * 4 && // Check if pointer is in the proximity area around the corner
+            y <= distanceItem[1] + modifiers.proximity * 4 &&
+            // But not too close to the corner itself
+            !(
+              x >= distanceItem[0] - modifiers.proximity * 2 &&
+              y >= distanceItem[1] - modifiers.proximity * 2 &&
+              x <= distanceItem[0] + modifiers.proximity * 2 &&
+              y <= distanceItem[1] + modifiers.proximity * 2
+            ))
+        ) {
+          if (!state.slowState.boxMode) {
+            state.transitionRotate = true;
+          }
+        }
+        state.transitionDirection = transitionDirection as any;
+      }
       return true;
     }
 
@@ -93,9 +118,9 @@ export const boundingBoxCorners: TransitionIntent = {
     const index = distances.indexOf(minDistance);
     state.transitionDirection = index !== -1 ? (choice[index] as any) : null;
 
-    if (minDistance > modifiers.proximity && !state.slowState.boxMode) {
-      state.transitionRotate = true;
-    }
+    // if (minDistance > modifiers.proximity && !state.slowState.boxMode) {
+    //   state.transitionRotate = true;
+    // }
   },
   transition(pointers, state, modifiers) {
     // Start with transform, scaling points from the origin.
@@ -108,7 +133,7 @@ export const boundingBoxCorners: TransitionIntent = {
       origin = [box.x + box.width / 2, box.y + box.height / 2];
       // Rotation.
       const startAngle = Math.atan2(start[1] - origin[1], start[0] - origin[0]);
-      let angle = Math.atan2(y - origin[1], x - origin[0]);
+      const angle = Math.atan2(y - origin[1], x - origin[0]);
       const shouldSnapToSteps = modifiers.Shift;
       const snapAngle = Math.PI / (modifiers.Alt ? 4 : 12);
       let angleDiff = angle - startAngle;

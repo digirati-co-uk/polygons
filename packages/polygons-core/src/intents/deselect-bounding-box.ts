@@ -1,8 +1,9 @@
-import { ActionIntent } from '../types';
+import type { ActionIntent } from '../types';
 
 export const deselectBoundingBox: ActionIntent = {
   type: 'deselect-bounding-box',
   label: 'Deselect bounding box',
+  tools: ['pointer'],
   trigger: { type: 'click' },
   isValid(pointers, state, modifiers) {
     return (

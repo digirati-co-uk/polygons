@@ -1,9 +1,10 @@
-import { TransitionIntent } from '../types';
+import type { TransitionIntent } from '../types';
 import { translateBoundingBox } from './translate-bounding-box';
 
 export const moveLine: TransitionIntent = {
   type: 'move-line',
   label: 'Move line',
+  tools: ['pen', 'pointer'],
   isValid(pointers, state, modifiers) {
     if (!state.slowState.lineMode) {
       return false;

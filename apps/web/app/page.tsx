@@ -1,12 +1,13 @@
 'use client';
-import { useEffect, useReducer, useState } from 'react';
 import type { Runtime } from '@atlas-viewer/atlas';
 import { AtlasAuto, HTMLPortal, ImageService } from '@atlas-viewer/atlas';
-import { Vault, parseSelector } from '@iiif/helpers';
-import { useSvgEditor } from './_helpers/use-svg-editor';
-import { useLocalStorage } from './_helpers/use-local-storage';
+import { Vault } from '@iiif/helpers';
+import type { ValidTools } from 'polygons-core';
+import { useEffect, useReducer, useState } from 'react';
 import type { ShapeState } from './_helpers/shape-reducer';
 import { shapeReducer } from './_helpers/shape-reducer';
+import { useLocalStorage } from './_helpers/use-local-storage';
+import { useSvgEditor } from './_helpers/use-svg-editor';
 
 // @ts-expect-error
 globalThis.IIIF_VAULT = globalThis.IIIF_VAULT || new Vault();
@@ -65,6 +66,7 @@ export default function MainPage() {
     isHoveringPoint,
     isAddingPoint,
     isSplitting,
+    currentTool,
   } = useSvgEditor(
     {
       currentShape,
@@ -76,7 +78,7 @@ export default function MainPage() {
       },
       image,
     },
-    [selectedShape]
+    [selectedShape],
   );
 
   useEffect(() => {
@@ -84,7 +86,13 @@ export default function MainPage() {
   }, [selectedShape, shapes]);
 
   const mouseMove = (e: any) => {
-    helper.pointer([[~~e.atlas.x, ~~e.atlas.y]]);
+    if (e && e.atlas && typeof e.atlas.x === 'number' && typeof e.atlas.y === 'number') {
+      helper.pointer([[~~e.atlas.x, ~~e.atlas.y]]);
+    }
+  };
+
+  const setTool = (tool: ValidTools) => {
+    helper.tools.setTool(tool);
   };
 
   const toggleLineMode = () => {
@@ -113,6 +121,10 @@ export default function MainPage() {
 
   const changeShape = (idx: number) => {
     dispatch({ type: 'select-shape', idx });
+    // Auto-select appropriate tool when switching shapes
+    if (helper.state.polygon.points.length > 0) {
+      helper.tools.autoSelect();
+    }
   };
 
   const addStamp = () => {
@@ -144,7 +156,7 @@ export default function MainPage() {
 
   const keyDown = (e: any) => {
     const resp = helper.key.down(e.key);
-    if ((e.key === 'Delete' || e.key === 'Backspace') && state.showBoundingBox) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state?.showBoundingBox) {
       deleteShape();
     }
     if (resp) {
@@ -156,11 +168,12 @@ export default function MainPage() {
     helper.draw.toggle();
   };
 
+  // Use cursor from the tool system
   const wrapperClasses: string[] = [];
   if (transitionDirection) {
     wrapperClasses.push(transitionDirection);
   }
-  if (isHoveringPoint || state.transitionIntentType === 'move-shape' || state.transitionIntentType === 'move-point') {
+  if (isHoveringPoint || state?.transitionIntentType === 'move-shape' || state?.transitionIntentType === 'move-point') {
     wrapperClasses.push('move');
   }
   if (isAddingPoint) {
@@ -172,8 +185,13 @@ export default function MainPage() {
   if (transitionRotate) {
     wrapperClasses.push('rotate');
   }
-  if (state.transitionIntentType === 'draw-shape') {
+  if (state?.transitionIntentType === 'draw-shape') {
     wrapperClasses.push('draw');
+  }
+
+  // Add the current tool's cursor class
+  if (state?.cursor) {
+    wrapperClasses.push(state.cursor);
   }
 
   const selectedButton = { background: 'blue', color: '#fff' };
@@ -188,6 +206,67 @@ export default function MainPage() {
     >
       <div style={{ width: 400, background: '#fff', padding: 20, overflowY: 'auto', maxWidth: 400 }}>
         <h1>POLYGONS</h1>
+        <div style={{ marginBottom: 20 }}>
+          <h3>Tools</h3>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+            <button
+              onClick={() => setTool('pointer')}
+              style={currentTool === 'pointer' ? selectedButton : undefined}
+              title="Selection tool (V)"
+            >
+              Select (V)
+            </button>
+            <button
+              onClick={() => setTool('pen')}
+              style={currentTool === 'pen' ? selectedButton : undefined}
+              title="Pen tool (P)"
+            >
+              Pen (P)
+            </button>
+            <button
+              onClick={() => setTool('line')}
+              style={currentTool === 'line' ? selectedButton : undefined}
+              title="Line tool (N)"
+            >
+              Line (N)
+            </button>
+            <button
+              onClick={() => setTool('box')}
+              style={currentTool === 'box' ? selectedButton : undefined}
+              title="Box tool (B)"
+            >
+              Box (B)
+            </button>
+            <button
+              onClick={() => setTool('lineBox')}
+              style={currentTool === 'lineBox' ? selectedButton : undefined}
+              title="Line Box tool (L)"
+            >
+              Line Box (L)
+            </button>
+            <button
+              onClick={() => setTool('stamp')}
+              style={currentTool === 'stamp' ? selectedButton : undefined}
+              title="Stamp tool (S)"
+            >
+              Stamp (S)
+            </button>
+            <button
+              onClick={() => setTool('hand')}
+              style={currentTool === 'hand' ? selectedButton : undefined}
+              title="Hand tool (H)"
+            >
+              Hand (H)
+            </button>
+            <button
+              onClick={() => setTool('pencil')}
+              style={currentTool === 'pencil' ? selectedButton : undefined}
+              title="Pencil tool (D)"
+            >
+              Pencil (D)
+            </button>
+          </div>
+        </div>
         <ul>
           {shapes.map((shape, idx) => {
             return (
@@ -221,87 +300,168 @@ export default function MainPage() {
         </ul>
         <button onClick={addShape}>Add shape</button>
         <button onClick={deselectShape}>Deselect shape</button>
-        <button onClick={toggleLineMode}>{state.lineMode ? 'disable' : 'enable'} Line mode</button>
-        <button onClick={toggleLineBoxMode}>{state.lineBoxMode ? 'disable' : 'enable'} Line box mode</button>
-        <button onClick={toggleBoxMode}>{state.boxMode ? 'disable' : 'enable'} Box mode</button>
+        <button
+          onClick={() => helper.tools.clearSelection()}
+          disabled={!helper.state.selectedPoints || helper.state.selectedPoints.length === 0}
+        >
+          Clear Selection
+        </button>
+        <button
+          onClick={() => helper.tools.smartSelect()}
+          disabled={!helper.state.polygon?.points || helper.state.polygon.points.length === 0}
+        >
+          Smart Select
+        </button>
         <hr />
-        <button
-          disabled={state.lineMode || Boolean(state.selectedStamp) || !showShapes || state.drawMode}
-          onClick={() => {
-            helper.draw.enable();
-          }}
-          style={!state.lineMode && !state.selectedStamp && showShapes && state.drawMode ? selectedButton : undefined}
-        >
-          Draw mode
-        </button>
-        <button
-          disabled={state.lineMode || Boolean(state.selectedStamp) || !showShapes || !state.drawMode}
-          onClick={() => {
-            helper.draw.disable();
-          }}
-          style={!state.lineMode && !state.selectedStamp && showShapes && !state.drawMode ? selectedButton : undefined}
-        >
-          Shape mode
-        </button>
-        <div>
-          <hr />
-          <button onClick={clearStamp}>None</button>
-          <button
-            disabled={!showShapes}
-            onClick={addStamp}
-            style={state.selectedStamp?.id === 'custom' ? selectedButton : undefined}
-          >
-            Custom
-          </button>
-          <button
-            disabled={!showShapes}
-            onClick={() => {
-              helper.stamps.triangle();
-            }}
-            style={state.selectedStamp?.id === 'triangle' ? selectedButton : undefined}
-          >
-            Triangle
-          </button>
-          <button
-            disabled={!showShapes}
-            onClick={() => {
-              helper.stamps.square();
-            }}
-            style={state.selectedStamp?.id === 'square' ? selectedButton : undefined}
-          >
-            Square
-          </button>
-          <button
-            disabled={!showShapes}
-            onClick={() => {
-              helper.stamps.hexagon();
-            }}
-            style={state.selectedStamp?.id === 'hexagon' ? selectedButton : undefined}
-          >
-            Hexagon
-          </button>
-          <button
-            disabled={!showShapes}
-            onClick={() => {
-              helper.stamps.circle();
-            }}
-            style={state.selectedStamp?.id === 'circle' ? selectedButton : undefined}
-          >
-            Circle
-          </button>
-        </div>
+        {currentTool === 'pen' && (
+          <div>
+            <h3>Pen Tool Options</h3>
+            <button onClick={toggleDrawMode}>{state?.drawMode ? 'Standard Mode' : 'Draw Mode'}</button>
+            <p>
+              {helper.state.selectedPoints && helper.state.selectedPoints.length > 0
+                ? `Selected ${helper.state.selectedPoints.length} point(s)`
+                : helper.state.isOpen
+                  ? 'Continue drawing by clicking'
+                  : 'Click to start drawing'}
+            </p>
+          </div>
+        )}
+        {currentTool === 'pencil' && (
+          <div>
+            <h3>Pencil Tool Options</h3>
+            <p>Draw freehand with the pencil tool</p>
+          </div>
+        )}
+        {currentTool === 'line' && (
+          <div>
+            <h3>Line Tool Options</h3>
+            <button onClick={toggleLineMode}>{state?.lineMode ? 'Disable' : 'Enable'} Line mode</button>
+            <p>
+              {helper.state.selectedPoints && helper.state.selectedPoints.length > 0
+                ? `Selected ${helper.state.selectedPoints.length} point(s)`
+                : helper.state.isOpen
+                  ? 'Continue line by clicking'
+                  : 'Click to start line'}
+            </p>
+          </div>
+        )}
+        {currentTool === 'lineBox' && (
+          <div>
+            <h3>Line Box Tool Options</h3>
+            <button onClick={toggleLineBoxMode}>{state?.lineBoxMode ? 'Disable' : 'Enable'} Line box mode</button>
+          </div>
+        )}
+        {currentTool === 'box' && (
+          <div>
+            <h3>Box Tool Options</h3>
+            <button onClick={toggleBoxMode}>{state?.boxMode ? 'Disable' : 'Enable'} Box mode</button>
+            <button
+              onClick={() => {
+                helper.modes.lockAspectRatio();
+              }}
+              style={state?.fixedAspectRatio ? selectedButton : undefined}
+            >
+              Fixed Aspect Ratio
+            </button>
+            <button
+              onClick={() => {
+                helper.modes.unlockAspectRatio();
+              }}
+              style={!state?.fixedAspectRatio ? selectedButton : undefined}
+            >
+              Free Aspect Ratio
+            </button>
+          </div>
+        )}
+        {currentTool === 'stamp' && (
+          <div>
+            <h3>Stamp Tool Options</h3>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              <button onClick={clearStamp}>None</button>
+              <button onClick={addStamp} style={state.selectedStamp?.id === 'custom' ? selectedButton : undefined}>
+                Custom
+              </button>
+              <button
+                onClick={() => {
+                  helper.stamps.triangle();
+                }}
+                style={state?.selectedStamp?.id === 'triangle' ? selectedButton : undefined}
+              >
+                Triangle
+              </button>
+              <button
+                onClick={() => {
+                  helper.stamps.square();
+                }}
+                style={state?.selectedStamp?.id === 'square' ? selectedButton : undefined}
+              >
+                Square
+              </button>
+              <button
+                onClick={() => {
+                  helper.stamps.hexagon();
+                }}
+                style={state?.selectedStamp?.id === 'hexagon' ? selectedButton : undefined}
+              >
+                Hexagon
+              </button>
+              <button
+                onClick={() => {
+                  helper.stamps.circle();
+                }}
+                style={state?.selectedStamp?.id === 'circle' ? selectedButton : undefined}
+              >
+                Circle
+              </button>
+            </div>
+          </div>
+        )}
 
         <hr />
-        <div>Transition intent: {helper.label(state.transitionIntentType)}</div>
-        <pre>{JSON.stringify(helper.modifiers.getForType(state.transitionIntentType), null, 2)}</pre>
-        <div>Action intent: {helper.label(state.actionIntentType)}</div>
-        <pre>{JSON.stringify(helper.modifiers.getForType(state.actionIntentType), null, 2)}</pre>
-        <pre>{JSON.stringify(state, null, 2)}</pre>
+        <h3>Tool Information</h3>
+        <div>
+          Current Tool: <strong>{currentTool}</strong>
+        </div>
+        <div>
+          Cursor: <strong>{state?.cursor || 'default'}</strong>
+        </div>
+        <div>
+          Points: <strong>{helper.state.polygon?.points?.length || 0}</strong>
+        </div>
+        <div>
+          Selected: <strong>{helper.state.selectedPoints?.length || 0}</strong>
+        </div>
+        <div>
+          Shape: <strong>{helper.state.isOpen ? 'Open' : 'Closed'}</strong>
+        </div>
+
+        <h3>Available Actions</h3>
+        <div>Transition intent: {helper.label(state?.transitionIntentType)}</div>
+        <pre>{JSON.stringify(helper.modifiers.getForType(state?.transitionIntentType), null, 2)}</pre>
+        <div>Action intent: {helper.label(state?.actionIntentType)}</div>
+        <pre>{JSON.stringify(helper.modifiers.getForType(state?.actionIntentType), null, 2)}</pre>
+
+        <h3>Tool Keyboard Shortcuts</h3>
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          {Object.entries(helper.tools.shortcuts).map(([tool, key]) =>
+            key ? (
+              <li key={tool}>
+                <strong>{key}</strong>: {tool}
+              </li>
+            ) : null,
+          )}
+        </ul>
+
+        <h3>Debug Information</h3>
+        <details>
+          <summary>State details</summary>
+          <pre style={{ fontSize: '10px' }}>{JSON.stringify(state, null, 2)}</pre>
+        </details>
       </div>
       <div className={wrapperClasses.join(' ')} style={{ flex: 1, alignContent: 'stretch', display: 'flex' }}>
         <AtlasAuto
           containerStyle={{ height: '100%', width: '100%', flex: 1 }}
-          mode={currentShape ? 'sketch' : 'explore'}
+          mode={currentShape && state.currentTool !== 'hand' ? 'sketch' : 'explore'}
           onCreated={(rt) => {
             setRuntime(rt.runtime);
           }}
@@ -341,8 +501,8 @@ export default function MainPage() {
                         },
                       } as any
                     }
-                  // vectorEffect="non-scaling-stroke"
-                  // style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
+                    // vectorEffect="non-scaling-stroke"
+                    // style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}
                   />
                 );
               })}
@@ -365,8 +525,8 @@ export default function MainPage() {
                             state.transitioning || currentShape?.open
                               ? undefined
                               : () => {
-                                changeShape(idx);
-                              }
+                                  changeShape(idx);
+                                }
                           }
                           points={shape.points.map((r) => r.join(',')).join(' ')}
                           style={{ pointerEvents: state.transitioning || currentShape?.open ? 'none' : 'visible' }}

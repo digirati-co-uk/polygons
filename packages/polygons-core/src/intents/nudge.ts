@@ -1,5 +1,5 @@
-import { ActionIntent } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent } from '../types';
 
 const NUDGE_AMOUNT_MODIFIER = 4;
 
@@ -7,6 +7,7 @@ export const nudgeRight: ActionIntent = {
   type: 'nudge-right',
   label: 'Nudge right',
   trigger: { type: 'key', key: 'ArrowRight' },
+  tools: ['pointer', 'pen'],
   modifiers: {
     Shift: 'Nudge right more',
   },
@@ -31,6 +32,7 @@ export const nudgeLeft: ActionIntent = {
   type: 'nudge-left',
   label: 'Nudge left',
   trigger: { type: 'key', key: 'ArrowLeft' },
+  tools: ['pointer', 'pen'],
   modifiers: {
     Shift: 'Nudge left more',
   },
@@ -55,6 +57,7 @@ export const nudgeUp: ActionIntent = {
   type: 'nudge-up',
   label: 'Nudge up',
   trigger: { type: 'key', key: 'ArrowUp' },
+  tools: ['pointer', 'pen'],
   modifiers: {
     Shift: 'Nudge up more',
   },
@@ -84,6 +87,7 @@ export const nudgeDown: ActionIntent = {
   type: 'nudge-down',
   label: 'Nudge down',
   trigger: { type: 'key', key: 'ArrowDown' },
+  tools: ['pointer', 'pen'],
   modifiers: {
     Shift: 'Nudge down more',
   },

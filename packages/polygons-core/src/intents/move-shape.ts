@@ -1,9 +1,10 @@
-import { TransitionIntent } from '../types';
+import type { TransitionIntent } from '../types';
 import { translateBoundingBox } from './translate-bounding-box';
 
 export const moveShape: TransitionIntent = {
   type: 'move-shape',
   label: 'Move shape',
+  tools: ['pointer', 'hand', 'box'],
   isValid(pointers, state, modifiers) {
     if (modifiers.Shift) {
       return false;

@@ -1,9 +1,10 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent, Modifiers, RenderState } from '../types';
 
 export const deletePoint: ActionIntent = {
   type: 'delete-point',
   label: 'Delete point',
+  tools: ['pointer', 'pen', 'lineBox', 'line'],
   trigger: { type: 'key', key: 'Backspace' },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     // if (!state.isOpen) {

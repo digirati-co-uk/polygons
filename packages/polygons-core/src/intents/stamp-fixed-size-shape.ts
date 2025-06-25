@@ -1,10 +1,11 @@
-import { ActionIntent } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent } from '../types';
 
 export const stampFixedSizeShape: ActionIntent = {
   type: 'stamp-fixed-size-shape',
   label: 'Stamp fixed size shape',
   trigger: { type: 'click' },
+  tools: ['stamp'],
   isValid(pointers, state, modifiers) {
     return state.slowState.selectedStamp !== null;
   },

@@ -1,5 +1,5 @@
-import { RenderState, SlowState } from './types';
 import { simplifyPolygon } from './math';
+import type { RenderState, SlowState } from './types';
 
 interface SvgHelpersOptions {
   proximityThreshold?: number;
@@ -61,7 +61,7 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
           [bb.x, bb.y + bb.height],
         ]
           .map((r) => r.join(','))
-          .join(' ')
+          .join(' '),
       );
     }
   }
@@ -78,20 +78,22 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
       el.setAttribute('cy', '' + state.closestLinePoint[1]);
       el.setAttribute(
         'fill',
-        state.closestLineDistance < proximityThreshold ? closestLinePointFill.selected : closestLinePointFill.unselected
+        state.closestLineDistance < proximityThreshold
+          ? closestLinePointFill.selected
+          : closestLinePointFill.unselected,
       );
       el.setAttribute(
         'stroke',
         state.closestLineDistance < proximityThreshold
           ? closestLinePointStroke.selected
-          : closestLinePointStroke.unselected
+          : closestLinePointStroke.unselected,
       );
     }
   }
   function updateClosestLinePointTransform(
     el: SVGElement | undefined | null,
     state: RenderState,
-    slowState: SlowState
+    slowState: SlowState,
   ) {
     if (el && state.closestLinePoint && slowState.hasClosestLine) {
       el.setAttribute('transform', `translate(${state.closestLinePoint[0]}, ${state.closestLinePoint[1]})`);
@@ -145,14 +147,14 @@ export function createSvgHelpers(options: SvgHelpersOptions = {}) {
     el: SVGElement | undefined | null,
     state: RenderState,
     slowState: SlowState,
-    tolerance = 3
+    tolerance = 3,
   ) {
     if (el && state.transitionDraw.length) {
       el.setAttribute(
         'points',
-        simplifyPolygon(state.transitionDraw, tolerance * 3)
+        simplifyPolygon(state.transitionDraw, tolerance * state.scale)
           .map((p) => p.join(','))
-          .join(' ')
+          .join(' '),
       );
     }
   }

@@ -1,22 +1,25 @@
-import { Modifiers, RenderState, TransitionIntent } from '../types';
-import { Point, Polygon, updateBoundingBox } from '../polygon';
+import { type Point, type Polygon, updateBoundingBox } from '../polygon';
+import { square } from '../shapes';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const stampShape: TransitionIntent = {
   type: 'stamp-shape',
   label: 'Stamp shape',
+  tools: ['stamp', 'box'],
   modifiers: {
     Shift: 'Maintain aspect ratio',
   },
 
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    return state.slowState.selectedStamp !== null;
+    return true;
   },
 
   start(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     const pointer = pointers[0];
-    if (pointer && state.slowState.selectedStamp) {
-      // Check the selected shape, rescale and insert at the cursor position (small) in transition points.
-      const stamp = state.slowState.selectedStamp;
+    // Check the selected shape, rescale and insert at the cursor position (small) in transition points.
+    const stamp = state.slowState.selectedStamp || square;
+
+    if (pointer) {
       // No rounding, fit it into a 32x32 box, starting from the pointer.
       const x = pointer[0];
       const y = pointer[1];
@@ -52,7 +55,7 @@ export const stampShape: TransitionIntent = {
     if (!state.transitionOrigin) return;
 
     const box = state.polygon.boundingBox!;
-    let origin: Point = [box.x, box.y];
+    const origin: Point = [box.x, box.y];
     const start = state.transitionOrigin || pointers[0];
     const [x, y] = pointers[0];
 
@@ -107,6 +110,7 @@ export const stampShape: TransitionIntent = {
     return {
       isOpen: false,
       points: state.transitionPoints!,
+      tool: 'pointer',
     };
   },
 };

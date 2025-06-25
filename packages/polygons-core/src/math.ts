@@ -1,4 +1,5 @@
-import { Point } from './polygon';
+import type { Point } from './polygon';
+import type { InputShape } from './types';
 
 export function proximity(pointer: Point, points: Array<[number, number]>, threshold: number, scale: number) {
   const distances = points.map((point) => {
@@ -23,7 +24,7 @@ export function distance1D(a: number, b: number) {
 export function distance(a: Point, b: Point) {
   const xDelta = distance1D(a[0], b[0]);
   const yDelta = distance1D(a[1], b[1]);
-  return Math.sqrt(Math.pow(xDelta, 2) + Math.pow(yDelta, 2));
+  return Math.sqrt(xDelta ** 2 + yDelta ** 2);
 }
 
 function sum(u: Point, v: Point): Point {
@@ -76,7 +77,7 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
   let vt; // vertex buffer
   let mk; // marker buffer
 
-  var simplifyDP = function (tol: number, v: Point[], j: number, k: number, mk: number[]) {
+  var simplifyDP = (tol: number, v: Point[], j: number, k: number, mk: number[]) => {
     //  This is the Douglas-Peucker recursive simplification routine
     //  It just marks vertices that are part of the simplified polyline
     //  for approximating the polyline subchain v[j] to v[k].
@@ -88,10 +89,10 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
     // check for adequate approximation by segment S from v[j] to v[k]
     let maxi = j; // index of vertex farthest from S
     let maxd2 = 0; // distance squared of farthest vertex
-    let tol2 = tol * tol; // tolerance squared
+    const tol2 = tol * tol; // tolerance squared
     S = [v[j], v[k]]; // segment from v[j] to v[k]
     u = diff(S[1], S[0]); // segment direction vector
-    let cu = norm2(u); // segment length squared
+    const cu = norm2(u); // segment length squared
     // test each vertex v[i] for max distance from S
     // compute using the Feb 2001 Algorithm's dist_Point_to_Segment()
     // Note: this works in any dimension (2D, 3D, ...)
@@ -131,10 +132,10 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
     return;
   };
 
-  let n = V.length;
-  let sV: any[] = [];
+  const n = V.length;
+  const sV: any[] = [];
   let i, k, m, pv; // misc counters
-  let tol2 = tol * tol; // tolerance squared
+  const tol2 = tol * tol; // tolerance squared
   vt = []; // vertex buffer, points
   mk = []; // marker buffer, ints
 
@@ -162,4 +163,41 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
     }
   }
   return sV;
+}
+
+export function isRectangle(points: Point[]) {
+  if (points.length !== 4) return false;
+  // Convert to Point type for consistency with other functions
+  const pts: Point[] = points.map((p) => [p[0], p[1]]);
+
+  // Calculate all four side vectors
+  const sides = [
+    diff(pts[1], pts[0]), // side 0->1
+    diff(pts[2], pts[1]), // side 1->2
+    diff(pts[3], pts[2]), // side 2->3
+    diff(pts[0], pts[3]), // side 3->0
+  ];
+
+  // For a rectangle, opposite sides should be parallel and equal
+  // and adjacent sides should be perpendicular
+
+  // Check if opposite sides are parallel and equal length
+  const side0Length = norm(sides[0]);
+  const side1Length = norm(sides[1]);
+  const side2Length = norm(sides[2]);
+  const side3Length = norm(sides[3]);
+
+  const tolerance = 1e-10;
+
+  // Opposite sides should have equal length
+  if (Math.abs(side0Length - side2Length) > tolerance) return false;
+  if (Math.abs(side1Length - side3Length) > tolerance) return false;
+
+  // Adjacent sides should be perpendicular (dot product = 0)
+  if (Math.abs(dot(sides[0], sides[1])) > tolerance) return false;
+  if (Math.abs(dot(sides[1], sides[2])) > tolerance) return false;
+  if (Math.abs(dot(sides[2], sides[3])) > tolerance) return false;
+  if (Math.abs(dot(sides[3], sides[0])) > tolerance) return false;
+
+  return true;
 }

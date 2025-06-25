@@ -1,10 +1,11 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { ActionIntent, Modifiers, RenderState } from '../types';
 
 export const deselectDraw: ActionIntent = {
   type: 'deselect-draw',
   label: 'Deselect draw',
   trigger: { type: 'key', key: 'Escape' },
+  tools: ['pointer', 'pen', 'box', 'lineBox', 'stamp', 'hand', 'pencil'],
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     // if (!state.isOpen) {
     //   return false;

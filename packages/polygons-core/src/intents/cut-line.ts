@@ -1,10 +1,11 @@
-import { ActionIntent } from '../types';
+import type { Point } from '../polygon';
+import type { ActionIntent } from '../types';
 import { splitLine } from './split-line';
-import { Point } from '../polygon';
 
 export const cutLine: ActionIntent = {
   type: 'cut-line',
   label: 'Add new point',
+  tools: ['pen'],
   trigger: { type: 'click' },
   modifiers: {
     Shift: 'Cut line',

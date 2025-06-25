@@ -1,29 +1,44 @@
-import { perimeterNearestTo, Point, Polygon, precalculate as _precalculate, updateBoundingBox } from './polygon';
-import { ActionIntent, InputShape, RenderFunc, RenderState, SetState, SlowState, TransitionIntent } from './types';
-import { translateBoundingBox } from './intents/translate-bounding-box';
-import { moveShape } from './intents/move-shape';
-import { distance } from './math';
-import { movePoint } from './intents/move-point';
-import { selectPoint } from './intents/select-point';
-import { splitLine } from './intents/split-line';
 import { addOpenPoint } from './intents/add-open-point';
-import { closeShape } from './intents/close-shape';
-import { deselectDraw } from './intents/deselect-draw';
-import { selectShape } from './intents/select-shape';
-import { deselectBoundingBox } from './intents/deselect-bounding-box';
 import { boundingBoxCorners } from './intents/bounding-box-corners';
-import { cutLine } from './intents/cut-line';
-import { selectMultiplePoints } from './intents/select-multiple-points';
-import { deselectPoints } from './intents/deselect-points';
-import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
-import { deletePoint } from './intents/delete-point';
-import { drawShape } from './intents/draw-shape';
-import { stampShape } from './intents/stamp-shape';
-import { closeShapeLine } from './intents/close-shape-line';
-import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
-import { moveLine } from './intents/move-line';
 import { closeLineBox } from './intents/close-line-box';
+import { closeShape } from './intents/close-shape';
+import { closeShapeLine } from './intents/close-shape-line';
+import { cutLine } from './intents/cut-line';
+import { deletePoint } from './intents/delete-point';
+import { deselectBoundingBox } from './intents/deselect-bounding-box';
+import { deselectDraw } from './intents/deselect-draw';
+import { deselectPoints } from './intents/deselect-points';
+import { drawShape } from './intents/draw-shape';
+import { moveLine } from './intents/move-line';
+import { movePoint } from './intents/move-point';
+import { moveShape } from './intents/move-shape';
+import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
+import { selectMultiplePoints } from './intents/select-multiple-points';
+import { selectPoint } from './intents/select-point';
+import { selectShape } from './intents/select-shape';
+import { splitLine } from './intents/split-line';
+import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
+import { stampShape } from './intents/stamp-shape';
+import { translateBoundingBox } from './intents/translate-bounding-box';
+import { distance, isRectangle } from './math';
+import {
+  precalculate as _precalculate,
+  type Point,
+  type Polygon,
+  perimeterNearestTo,
+  updateBoundingBox,
+} from './polygon';
 import * as shapes from './shapes';
+import type {
+  ActionIntent,
+  InputShape,
+  RenderFunc,
+  RenderState,
+  SetState,
+  SlowState,
+  TransitionIntent,
+  ValidTools,
+} from './types';
 
 const requestAnimationFrame =
   typeof window !== 'undefined' ? window.requestAnimationFrame : (func: any) => setTimeout(func, 16) as any as number;
@@ -57,7 +72,6 @@ interface CreateHelperInput {
  * UI to the screen.
  */
 const transitionIntents = [
-  stampShape,
   boundingBoxCorners,
   movePoint,
   moveLine,
@@ -66,6 +80,7 @@ const transitionIntents = [
   translateBoundingBox,
   drawShape,
   selectMultiplePoints,
+  stampShape,
 ];
 const transitionIntentsLength = transitionIntents.length;
 
@@ -123,6 +138,15 @@ const BASE_PROXIMITY = 10;
 export function createHelper(input: CreateHelperInput | null, onSave: (input: CreateHelperInput) => void) {
   const initialMode = input?.mode || 'polygon';
   const fixedAspectRatio = input?.fixedAspectRatio || false;
+
+  // Map the initialMode to a corresponding tool
+  let initialTool: ValidTools = 'pointer';
+  if (initialMode === 'box') initialTool = 'box';
+  else if (initialMode === 'line') initialTool = 'line';
+  else if (initialMode === 'draw') initialTool = 'pen';
+  else if (initialMode === 'linebox') initialTool = 'lineBox';
+  else initialTool = 'pointer';
+
   // This state will not change frequently.
   const slowState: SlowState = {
     shapeId: input?.id || null,
@@ -151,6 +175,20 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     drawMode: initialMode === 'draw',
     bezierLines: [],
     fixedAspectRatio,
+    cursor: 'default',
+    // Initialize tools with defaults based on initialTool
+    tools: {
+      hand: false,
+      pointer: initialTool === 'pointer',
+      lineBox: initialTool === 'lineBox',
+      stamp: false,
+      box: initialTool === 'box',
+      pen: initialTool === 'pen',
+      pencil: false,
+      line: initialTool === 'line',
+    },
+    // Set the current tool
+    currentTool: initialTool,
   };
 
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -180,6 +218,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     selectionBox: null,
     slowState,
     transitionDraw: [],
+    panOffset: { x: 0, y: 0 },
+    isPanning: false,
+    panStart: null,
   };
 
   // This is state held internally to the helper.
@@ -188,8 +229,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     time: 0,
     shouldUpdate: false,
     nextSlowState: null as SlowState | null,
-    renderFunc: (() => { }) as RenderFunc,
-    setStateFunc: (() => { }) as SetState,
+    renderFunc: (() => {}) as RenderFunc,
+    setStateFunc: (() => {}) as SetState,
     animationFrame: 0,
     actionIntent: null as ActionIntent | null,
     transitionIntent: null as TransitionIntent | null,
@@ -265,6 +306,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     updateCurrentIntent();
     calculateLine();
     calculateLineBox();
+    updateIsRectangle();
 
     // Then the render function from the user last, once the state is updated.
     internals.renderFunc(state, state.slowState, delta);
@@ -312,22 +354,15 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   }
 
   function updateBoundingBoxVisibility() {
-    if (state.slowState.showBoundingBox) {
-      if (
-        state.slowState.noShape ||
-        state.selectedPoints.length === 0 ||
-        state.selectedPoints.length !== state.polygon.points.length
-      ) {
-        setState({ showBoundingBox: false });
-      }
-    } else {
-      if (
-        !state.slowState.noShape &&
-        state.polygon.points.length &&
-        state.selectedPoints.length === state.polygon.points.length
-      ) {
-        setState({ showBoundingBox: true });
-      }
+    const shouldShow =
+      !state.slowState.noShape &&
+      state.polygon.points.length > 2 &&
+      state.selectedPoints.length === state.polygon.points.length &&
+      !state.isOpen &&
+      (state.slowState.currentTool === 'pointer' || state.slowState.currentTool === 'box');
+
+    if (state.slowState.showBoundingBox !== shouldShow) {
+      setState({ showBoundingBox: shouldShow });
     }
   }
 
@@ -374,6 +409,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     }
   }
 
+  function updateIsRectangle() {
+    setState({ boxMode: isRectangle(state.polygon.points || []) });
+  }
+
   function updateShapeIntersection() {
     if (!state.pointer || state.slowState.noShape) {
       setState({ pointerInsideShape: false });
@@ -401,7 +440,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     let inside = false;
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
       if (
-        points[i][1] > y != points[j][1] > y &&
+        points[i][1] > y !== points[j][1] > y &&
         x < ((points[j][0] - points[i][0]) * (y - points[i][1])) / (points[j][1] - points[i][1]) + points[i][0]
       ) {
         inside = !inside;
@@ -467,20 +506,70 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     }
   }
 
+  /**
+   * Get all intents that are valid for a specific tool
+   * This is useful for UI hints and filtering available actions
+   */
+  function getValidIntentsForTool(tool: ValidTools, point: Point | null = null): Record<string, string> {
+    const validIntents: Record<string, string> = {};
+    const testPoint = point || (state.pointer ? [state.pointer[0], state.pointer[1]] : null);
+
+    // Combine all intent types
+    for (const intent of [...transitionIntents, ...actionIntents, ...keyIntents]) {
+      // Only include intents that work with this tool
+      if (intent.tools.includes(tool)) {
+        // If we have a test point, check validity
+        if (testPoint && intent.isValid([testPoint], state, getModifiers())) {
+          validIntents[intent.type] = intent.label;
+        } else if (!testPoint) {
+          // Without a test point, just include all intents for this tool
+          validIntents[intent.type] = intent.label;
+        }
+      }
+    }
+
+    return validIntents;
+  }
+
   function updateCurrentIntent() {
-    if (!state.pointer) return;
+    // Don't update intents if we're transitioning or have no shape
     if (state.slowState.transitioning) return;
     if (state.slowState.noShape) return;
+
+    // Make sure we have a valid pointer
+    if (
+      !state.pointer ||
+      !Array.isArray(state.pointer) ||
+      state.pointer.length < 2 ||
+      typeof state.pointer[0] !== 'number' ||
+      typeof state.pointer[1] !== 'number'
+    ) {
+      return;
+    }
+
+    // Get the current active tool
+    const currentTool = state.slowState.currentTool;
+
+    // Update valid intent keys to help UI display available actions
+    const validIntentKeys = getValidIntentsForTool(currentTool, state.pointer);
+
+    // Update UI visibility based on current tool
+    updateToolVisibility(currentTool);
+
+    setState({ validIntentKeys });
 
     // Do some calculations for the intents to use, and also to update the pending UI.
     let didSetTransition = false;
     // We are not yet transitioning, and need to feed back to the user.
     for (let i = 0; i < transitionIntentsLength; i++) {
       const intent = transitionIntents[i];
+      // Skip intents that don't apply to the current tool
+      if (!intent.tools.includes(currentTool)) continue;
+
       const isValid = intent.isValid(
         pointerState.isPressed ? [pointerState.lastPress!] : [state.pointer],
         state,
-        getModifiers()
+        getModifiers(),
       );
       if (isValid) {
         if (internals.transitionIntent === intent) {
@@ -503,6 +592,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     let didSetAction = false;
     for (let i = 0; i < actionIntents.length; i++) {
       const intent = actionIntents[i];
+      // Skip intents that don't apply to the current tool
+      if (!intent.tools.includes(currentTool)) continue;
+
       if (validate(intent)) {
         if (internals.actionIntent === intent) {
           didSetAction = true;
@@ -578,12 +670,12 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
         if (point === 0) {
           prevAngle = Math.atan2(
             state.polygon.points[1][1] - state.polygon.points[0][1],
-            state.polygon.points[1][0] - state.polygon.points[0][0]
+            state.polygon.points[1][0] - state.polygon.points[0][0],
           );
         } else {
           prevAngle = Math.atan2(
             state.polygon.points[point - 1][1] - state.polygon.points[point][1],
-            state.polygon.points[point - 1][0] - state.polygon.points[point][0]
+            state.polygon.points[point - 1][0] - state.polygon.points[point][0],
           );
         }
       }
@@ -625,6 +717,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   function commit(intent: ActionIntent | TransitionIntent) {
     const resp = intent.commit([pointerState.lastPress!], state, getModifiers());
     if (resp) {
+      if (resp.tool) {
+        setTool(resp.tool);
+      }
       if (resp.selectedPoints) {
         state.selectedPoints = resp.selectedPoints;
         setState({ selectedPoints: resp.selectedPoints });
@@ -641,31 +736,76 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       if (resp.isOpen === true || resp.isOpen === false) {
         state.isOpen = resp.isOpen;
         internals.shouldUpdate = true;
+
+        // Auto-switch tools based on shape completion
+        if (resp.isOpen === false && state.slowState.currentTool === 'pen') {
+          // Shape was just closed with pen tool, switch to pointer for manipulation
+          setTimeout(() => {
+            setTool('pointer');
+          }, 50);
+        } else if (resp.isOpen === true && state.slowState.currentTool === 'pointer') {
+          // Shape was opened with pointer tool, switch to pen for editing
+          setTimeout(() => {
+            setTool('pen');
+          }, 50);
+        }
       }
       pushUndo({
         isOpen: state.isOpen,
         points: state.polygon.points,
         selectedPoints: state.selectedPoints,
       });
+
+      // Update tool visibility after commit changes
+      updateToolVisibility(state.slowState.currentTool);
     }
     setState({ transitionModifiers: null });
   }
 
   function validate(intent: ActionIntent | TransitionIntent) {
-    return intent.isValid(state.pointer ? [state.pointer] : [], state, getModifiers());
+    // Check if this intent is available for the current tool
+    if (!intent.tools.includes(state.slowState.currentTool)) {
+      return false;
+    }
+
+    // Create a safe pointer array for validation
+    let pointers: Point[] = [];
+    if (
+      state.pointer &&
+      Array.isArray(state.pointer) &&
+      state.pointer.length >= 2 &&
+      typeof state.pointer[0] === 'number' &&
+      typeof state.pointer[1] === 'number'
+    ) {
+      pointers = [state.pointer];
+    }
+
+    // Check if the intent is valid in the current state
+    const result = intent.isValid(pointers, state, getModifiers());
+
+    // For debugging - log valid intents
+    if (result && process.env.NODE_ENV !== 'production') {
+      console.debug(`Valid intent for ${state.slowState.currentTool}: ${intent.type} - ${intent.label}`);
+    }
+
+    return result;
   }
 
   function triggerKeyAction(key: string) {
     if (key === 'Delete') {
       key = 'Backspace';
     }
+    const currentTool = state.slowState.currentTool;
     for (const keyIntent of keyIntents) {
       if (keyIntent.trigger.type !== 'key' || keyIntent.trigger.key !== key) continue;
+      // Skip intents that don't apply to the current tool
+      if (!keyIntent.tools.includes(currentTool)) continue;
       if (validate(keyIntent)) {
         commit(keyIntent);
         return true;
       }
     }
+    return false;
   }
 
   function isDrawing() {
@@ -688,7 +828,14 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   // also use the Key manager to set these.
   const modifiers = {
     reset() {
-      setState({ modifiers: { Alt: false, Shift: false, Meta: false, proximity: BASE_PROXIMITY } });
+      setState({
+        modifiers: {
+          Alt: false,
+          Shift: false,
+          Meta: false,
+          proximity: BASE_PROXIMITY,
+        },
+      });
     },
     getForType(type: string | null) {
       const modifiers: Record<string, string> = {};
@@ -703,23 +850,29 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     set(modifier: string) {
       if (modifier !== 'Shift' && modifier !== 'Alt' && modifier !== 'Meta') return;
       setState({
-        modifiers: { ...(internals.nextSlowState?.modifiers || state.slowState.modifiers), [modifier]: true },
+        modifiers: {
+          ...(internals.nextSlowState?.modifiers || state.slowState.modifiers),
+          [modifier]: true,
+        },
       });
     },
     unset(modifier: string) {
       if (modifier !== 'Shift' && modifier !== 'Alt' && modifier !== 'Meta') return;
       setState({
-        modifiers: { ...(internals.nextSlowState?.modifiers || state.slowState.modifiers), [modifier]: false },
+        modifiers: {
+          ...(internals.nextSlowState?.modifiers || state.slowState.modifiers),
+          [modifier]: false,
+        },
       });
     },
   };
 
   const stamps = {
     set(selectedStamp: InputShape | null) {
-      if (state.slowState.boxMode && selectedStamp && (selectedStamp.id !== 'square' && selectedStamp.id !== 'rectangle')) {
-        return;
-      }
-      setState({ selectedStamp });
+      setState({
+        selectedStamp,
+        boxMode: selectedStamp ? selectedStamp.id === 'square' || selectedStamp.id === 'rectangle' : false,
+      });
     },
     clear() {
       stamps.set(null);
@@ -746,7 +899,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   // the container for the SVG element.
   const key = {
     down(key: string) {
-      if (key == 'Shift' || key == 'Alt' || key == 'Meta') {
+      if (key === 'Shift' || key === 'Alt' || key === 'Meta') {
         modifiers.set(key);
         return true;
       }
@@ -762,6 +915,36 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
         }
         return true;
       }
+
+      // Tool shortcuts
+      if (!state.slowState.modifiers.Meta && !state.slowState.modifiers.Alt && !state.slowState.transitioning) {
+        const toolKey = key.toUpperCase();
+
+        // Map keys to tools
+        const toolMap: Record<string, ValidTools> = {
+          V: 'pointer',
+          P: 'pen',
+          B: 'box',
+          L: 'lineBox',
+          S: 'stamp',
+          H: 'hand',
+          N: 'line',
+          D: 'pencil',
+        };
+
+        if (toolMap[toolKey]) {
+          const newTool = toolMap[toolKey];
+
+          // Log tool change (only in non-production)
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug(`Tool change: ${state.slowState.currentTool} -> ${newTool} (via keyboard)`);
+          }
+
+          setTool(newTool);
+          return true;
+        }
+      }
+
       return triggerKeyAction(key);
     },
     up(key: string) {
@@ -828,9 +1011,15 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   // It will ensure that transitions are started, and that the state is
   // kept in sync for the clock.
   function pointer(pointers: Point[]) {
+    // Safety checks for invalid inputs
+    if (!pointers || !Array.isArray(pointers) || pointers.length === 0) {
+      return;
+    }
+
     // @todo come back later to support multiple pointers (multi-touch)
     const pointerA = pointers[0];
 
+    // Check if pointer is valid with x and y coordinates
     if (!pointerA || (!pointerA[0] && pointerA[0] !== 0) || (!pointerA[1] && pointerA[1] !== 0)) {
       return;
     }
@@ -839,7 +1028,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       return;
     }
 
-    state.pointer = pointerA || null;
+    state.pointer = pointerA;
 
     if (state.slowState.transitioning) {
       // We are transitioning, we should update the transition.
@@ -1051,47 +1240,352 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     setState({ fixedAspectRatio: false });
   }
 
+  // Tools
+  // Tool management functions
+  function setTool(tool: ValidTools) {
+    // Skip if already on this tool
+    if (state.slowState.currentTool === tool) {
+      return;
+    }
+
+    // Cancel any ongoing transition when switching tools
+    if (state.slowState.transitioning) {
+      state.transitionPoints = null;
+      state.transitionBoundingBox = null;
+      state.transitionDraw = [];
+      state.line = null;
+      state.lineBox = null;
+      setState({ transitioning: false });
+    }
+
+    // Reset all tool states
+    const newTools = {
+      hand: false,
+      pointer: false,
+      lineBox: false,
+      stamp: false,
+      box: false,
+      pen: false,
+      pencil: false,
+      line: false,
+    };
+
+    // Set the requested tool to true
+    newTools[tool] = true;
+
+    // Get valid intents for this tool (for UI hints)
+    const validIntentKeys = getValidIntentsForTool(tool);
+
+    // Smart state management for tool switching
+    let selectedPoints = state.selectedPoints;
+    let isOpen = state.isOpen;
+    let drawMode = state.slowState.drawMode;
+    const selectedStamp = state.slowState.selectedStamp;
+
+    // Tool-specific state management
+    switch (tool) {
+      case 'pointer':
+        // Pointer tool works with selections, keep current selection
+        // but ensure we're not in drawing states
+        drawMode = false;
+        // If switching from another tool and we have a full shape, select all points
+        if (state.polygon.points.length > 0 && !isOpen && selectedPoints.length === 0) {
+          selectedPoints = state.polygon.points.map((_, idx) => idx);
+        }
+        break;
+
+      case 'pen':
+        // Pen tool: prepare for drawing/editing
+        drawMode = false;
+        if (state.polygon.points.length === 0) {
+          selectedPoints = [];
+          isOpen = true;
+        } else if (!isOpen) {
+          // If closed shape, select the last point to continue drawing
+          // selectedPoints = [state.polygon.points.length - 1];
+          // isOpen = true;
+          // NO.
+        } else if (selectedPoints.length > 1) {
+          // If multiple points selected, keep only the last one
+          selectedPoints = [selectedPoints[selectedPoints.length - 1]];
+        }
+        break;
+
+      case 'line':
+        // Line tool: similar to pen but enforce line mode
+        drawMode = false;
+        if (state.polygon.points.length === 0) {
+          selectedPoints = [];
+          isOpen = true;
+        } else if (!isOpen) {
+          selectedPoints = [state.polygon.points.length - 1];
+          isOpen = true;
+        } else if (selectedPoints.length > 1) {
+          selectedPoints = [selectedPoints[selectedPoints.length - 1]];
+        }
+        break;
+
+      case 'pencil':
+        // Pencil tool: always start fresh for freehand drawing
+        selectedPoints = [];
+        if (state.polygon.points.length === 0) {
+          isOpen = true;
+        }
+        drawMode = true;
+        break;
+
+      case 'box':
+        // Box tool: clear selection, use stamps
+        selectedPoints = [];
+        drawMode = false;
+        isOpen = false;
+        stamps.square();
+        break;
+
+      case 'lineBox':
+        // Line box tool: clear selection
+        selectedPoints = [];
+        drawMode = false;
+        if (state.polygon.points.length === 0) {
+          isOpen = true;
+        }
+        break;
+
+      case 'stamp':
+        // Stamp tool: clear selection, ensure we have a stamp
+        selectedPoints = [];
+        drawMode = false;
+        isOpen = false;
+        if (!selectedStamp) {
+          stamps.square();
+        }
+        break;
+
+      case 'hand':
+        // Hand tool: clear selection, disable drawing
+        selectedPoints = [];
+        drawMode = false;
+        // Keep current open/closed state
+        break;
+
+      default:
+        // Default: clear selection
+        selectedPoints = [];
+        drawMode = false;
+        break;
+    }
+
+    // Update related mode flags based on the tool
+    setState({
+      currentTool: tool,
+      tools: newTools,
+      validIntentKeys,
+      selectedPoints,
+      drawMode,
+      // Set appropriate mode flags based on tool
+      lineMode: tool === 'line',
+      lineBoxMode: tool === 'lineBox',
+      boxMode: tool === 'box',
+    });
+
+    // Update actual state
+    state.selectedPoints = selectedPoints;
+    state.isOpen = isOpen;
+
+    // Update visibility settings based on the new tool
+    updateToolVisibility(tool);
+
+    // Update UI with current valid intents
+    updateCurrentIntent();
+
+    // Log tool change (only in non-production)
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(`Tool changed: ${tool}, selectedPoints: ${selectedPoints.length}, isOpen: ${isOpen}`);
+    }
+  }
+
+  /**
+   * Updates the UI component visibility based on the current tool
+   * This helps provide appropriate context for each tool
+   */
+  function updateToolVisibility(tool: ValidTools) {
+    // Calculate if we should show bounding box
+    const shouldShowBoundingBox =
+      tool === 'box' ||
+      (tool === 'pointer' &&
+        state.polygon.points.length > 2 &&
+        state.selectedPoints.length === state.polygon.points.length &&
+        !state.isOpen);
+
+    // Set appropriate cursor for each tool
+    // let cursor = 'default';
+    // switch (tool) {
+    //   case 'hand':
+    //     cursor = state.slowState.transitioning ? 'grabbing' : 'grab';
+    //     break;
+    //   case 'pointer':
+    //     if (state.slowState.selectedPoints.length > 0) {
+    //       cursor = 'move';
+    //     } else if (state.slowState.pointerInsideShape) {
+    //       cursor = 'pointer';
+    //     } else {
+    //       cursor = 'default';
+    //     }
+    //     break;
+    //   case 'pen':
+    //     if (state.slowState.closestPoint !== null) {
+    //       cursor = 'pointer';
+    //     } else if (state.slowState.hasClosestLine) {
+    //       cursor = 'crosshair';
+    //     } else {
+    //       cursor = 'crosshair';
+    //     }
+    //     break;
+    //   case 'box':
+    //   case 'lineBox':
+    //     cursor = 'crosshair';
+    //     break;
+    //   case 'stamp':
+    //     cursor = 'copy';
+    //     break;
+    //   case 'pencil':
+    //     cursor = 'pencil';
+    //     break;
+    //   case 'line':
+    //     cursor = 'crosshair';
+    //     break;
+    // }
+
+    // Update state with visibility settings
+    setState({
+      showBoundingBox: shouldShowBoundingBox,
+      // cursor,
+    });
+  }
+
+  function unsetTool(tool: ValidTools) {
+    if (state.slowState.currentTool === tool) {
+      // If unsetting the current tool, default to pointer
+      setTool('pointer');
+    } else {
+      // Just unset this specific tool
+      setState({
+        tools: { ...state.slowState.tools, [tool]: false },
+      });
+    }
+  }
+
+  function toggleTool(tool: ValidTools) {
+    if (state.slowState.currentTool === tool) {
+      // If toggling the current tool, switch to pointer
+      setTool('pointer');
+    } else {
+      // Switch to the requested tool
+      setTool(tool);
+    }
+  }
+
+  // Smart tool switching based on context
+  function switchToAppropriateEditingTool() {
+    if (state.selectedPoints.length > 0) {
+      setTool('pointer');
+    } else if (state.isOpen) {
+      setTool('pen');
+    } else {
+      setTool('pointer');
+    }
+  }
+
+  // Updated mode management to work with the tool system
   const modes = {
-    toggleLineBoxMode,
-    toggleLineMode,
+    toggleLineMode() {
+      if (state.slowState.currentTool === 'line') {
+        setTool('pointer');
+      } else {
+        setTool('line');
+      }
+    },
     enableLineMode() {
-      setState({ lineMode: true, lineBoxMode: false, drawMode: false });
+      setTool('line');
     },
     disableLineMode() {
-      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
+      if (state.slowState.currentTool === 'line' || state.slowState.currentTool === 'pen') {
+        setTool('pointer');
+      }
     },
     enableLineBoxMode() {
-      setState({ lineMode: true, lineBoxMode: true, drawMode: false });
+      setTool('lineBox');
     },
     disableLineBoxMode() {
-      setState({ lineMode: false, lineBoxMode: false, drawMode: false });
+      if (state.slowState.currentTool === 'lineBox') {
+        setTool('pointer');
+      }
     },
     enableBoxMode() {
-      setState({
-        boxMode: true,
-        lineBoxMode: false,
-        lineMode: false,
-      });
-      stamps.square();
+      setTool('box');
     },
     disableBoxMode() {
-      setState({ boxMode: false, lineBoxMode: false, lineMode: false });
+      if (state.slowState.currentTool === 'box') {
+        setTool('pointer');
+      }
       stamps.clear();
     },
-    toggleBoxMode,
+    toggleLineBoxMode() {
+      if (state.slowState.currentTool === 'lineBox') {
+        setTool('pointer');
+      } else {
+        setTool('lineBox');
+      }
+    },
+    toggleBoxMode() {
+      if (state.slowState.currentTool === 'box') {
+        setTool('pointer');
+      } else {
+        setTool('box');
+      }
+    },
     lockAspectRatio,
     unlockAspectRatio,
+    // Additional mode helpers
+    enablePenMode() {
+      setTool('pen');
+    },
+    disablePenMode() {
+      if (state.slowState.currentTool === 'pen') {
+        setTool('pointer');
+      }
+    },
+    enableStampMode() {
+      setTool('stamp');
+    },
+    disableStampMode() {
+      if (state.slowState.currentTool === 'stamp') {
+        setTool('pointer');
+      }
+    },
   };
 
   const draw = {
     enable() {
-      setState({ drawMode: true, lineMode: false, lineBoxMode: false });
+      if (state.slowState.currentTool === 'pen') {
+        setState({ drawMode: true });
+      } else {
+        setTool('pencil');
+      }
     },
     disable() {
-      setState({ drawMode: false });
+      if (state.slowState.currentTool === 'pencil') {
+        setTool('pen');
+      } else {
+        setState({ drawMode: false });
+      }
     },
     toggle() {
-      setState({ drawMode: !state.slowState.drawMode, lineMode: false, lineBoxMode: false });
+      if (state.slowState.drawMode || state.slowState.currentTool === 'pencil') {
+        this.disable();
+      } else {
+        this.enable();
+      }
     },
   };
 
@@ -1105,6 +1599,157 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       return internals.undoStackPointer < internals.undoStack.length - 1;
     },
   };
+
+  // Tools API
+  const tools = {
+    setTool,
+    unsetTool,
+    toggleTool,
+    updateVisibility: updateToolVisibility,
+    get current() {
+      return state.slowState.currentTool;
+    },
+    get active() {
+      return state.slowState.tools;
+    },
+    get cursor() {
+      return state.slowState.cursor;
+    },
+    // Tool keyboard shortcut info
+    shortcuts: {
+      pointer: 'V', // Selection tool
+      pen: 'P', // Pen tool
+      box: 'B', // Box tool
+      lineBox: 'L', // Line box tool
+      stamp: 'S', // Stamp tool
+      hand: 'H', // Hand tool (pan)
+      pencil: 'D', // Pencil tool shortcut
+      line: 'N', // Line tool
+    },
+    // Get the current pan offset
+    get panOffset() {
+      return state.panOffset;
+    },
+    // Reset the pan offset to center the view
+    resetPan() {
+      state.panOffset = { x: 0, y: 0 };
+      internals.shouldUpdate = true;
+    },
+    // List all valid intents for current tool
+    getValidIntents(tool?: ValidTools) {
+      const targetTool = tool || state.slowState.currentTool;
+      return {
+        actions: actionIntents.filter((intent) => intent.tools.includes(targetTool)),
+        transitions: transitionIntents.filter((intent) => intent.tools.includes(targetTool)),
+        keys: keyIntents.filter((intent) => intent.tools.includes(targetTool)),
+        // Get all possible intents as a map of intent type to label
+        all: getValidIntentsForTool(targetTool),
+        // Get currently valid intents at pointer position
+        current: state.slowState.validIntentKeys,
+      };
+    },
+    // Get a description of the current tool and its state
+    getToolInfo() {
+      const tool = state.slowState.currentTool;
+      const canDraw = state.slowState.drawMode && tool === 'pen';
+
+      return {
+        name: tool,
+        mode: canDraw
+          ? 'draw'
+          : state.slowState.lineMode
+            ? 'line'
+            : state.slowState.boxMode
+              ? 'box'
+              : state.slowState.lineBoxMode
+                ? 'linebox'
+                : 'normal',
+        cursor: state.slowState.cursor,
+        selectionCount: state.selectedPoints.length,
+        pointCount: state.polygon.points.length,
+        isOpen: state.isOpen,
+      };
+    },
+    // Helper functions for better tool management
+    smartSelect() {
+      // Smart selection based on current state
+      if (state.polygon.points.length === 0) {
+        return;
+      }
+
+      if (state.isOpen) {
+        // Select the last point for continued editing
+        state.selectedPoints = [state.polygon.points.length - 1];
+        setState({ selectedPoints: state.selectedPoints });
+      } else {
+        // Select all points for shape manipulation
+        state.selectedPoints = state.polygon.points.map((_, idx) => idx);
+        setState({ selectedPoints: state.selectedPoints });
+      }
+    },
+    clearSelection() {
+      state.selectedPoints = [];
+      setState({ selectedPoints: [] });
+    },
+    // Switch to the most appropriate tool based on current state
+    autoSelect() {
+      if (state.selectedPoints.length === state.polygon.points.length && !state.isOpen) {
+        setTool('pointer');
+      } else if (state.isOpen || state.selectedPoints.length > 0) {
+        setTool('pen');
+      } else {
+        setTool('pointer');
+      }
+    },
+  };
+
+  /**
+   * Runs a diagnostic test on the tool system and returns a string with the results
+   * This is useful for debugging and validating that tool switching works correctly
+   */
+  function testToolSystem() {
+    // Test switching between tools
+    const results: string[] = [];
+
+    // Start with the initial tool
+    results.push(`Initial tool: ${state.slowState.currentTool}`);
+
+    // Test each tool
+    setTool('pointer');
+    results.push(
+      `Set to pointer: ${state.slowState.currentTool} (lineMode: ${state.slowState.lineMode}, boxMode: ${state.slowState.boxMode})`,
+    );
+
+    setTool('pen');
+    results.push(
+      `Set to pen: ${state.slowState.currentTool} (lineMode: ${state.slowState.lineMode}, boxMode: ${state.slowState.boxMode})`,
+    );
+
+    setTool('box');
+    results.push(
+      `Set to box: ${state.slowState.currentTool} (lineMode: ${state.slowState.lineMode}, boxMode: ${state.slowState.boxMode})`,
+    );
+
+    setTool('lineBox');
+    results.push(
+      `Set to lineBox: ${state.slowState.currentTool} (lineMode: ${state.slowState.lineMode}, boxMode: ${state.slowState.boxMode})`,
+    );
+
+    // Test toggling
+    toggleTool('pen');
+    results.push(`Toggle pen: ${state.slowState.currentTool}`);
+
+    toggleTool('pen');
+    results.push(`Toggle pen again: ${state.slowState.currentTool}`);
+
+    // Restore original state
+    setTool('pointer');
+
+    return results.join('\n');
+  }
+
+  // Initialize tool system
+  updateToolVisibility(state.slowState.currentTool);
 
   return {
     draw,
@@ -1122,8 +1767,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     setShape,
     modes,
     label,
+    tools,
+    // Include test function for debugging (in dev only)
+    ...(process.env.NODE_ENV !== 'production' ? { testToolSystem } : {}),
   };
 }
 
-export * from './types';
 export * from './svg-helpers';
+export * from './types';

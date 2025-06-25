@@ -1,9 +1,10 @@
-import { Point, precalculate, updateBoundingBox } from '../polygon';
-import { TransitionIntent, Modifiers, RenderState } from '../types';
+import { type Point, precalculate, updateBoundingBox } from '../polygon';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const translateBoundingBox: TransitionIntent = {
   type: 'move-bounding-box',
   label: 'Move bounding box',
+  tools: ['pointer'],
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     // When can you translate the bounding box?
     const size = state.polygon.points.length;

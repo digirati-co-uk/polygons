@@ -1,17 +1,14 @@
-import { Modifiers, RenderState, TransitionIntent } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const splitLine: TransitionIntent = {
   type: 'split-line',
   label: 'Split line',
+  tools: ['pen'],
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     if (modifiers.Meta || state.slowState.lineMode) {
       return false;
     }
-    if (state.slowState.boxMode) {
-      return false;
-    }
-    // if (!state.isOpen) return false;
 
     // Are we within X pixels of a line
     if (state.closestLinePoint && state.closestLineDistance < modifiers.proximity) {
