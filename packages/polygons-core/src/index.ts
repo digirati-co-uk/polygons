@@ -16,9 +16,14 @@ import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
 import { selectMultiplePoints } from './intents/select-multiple-points';
 import { selectPoint } from './intents/select-point';
 import { selectShape } from './intents/select-shape';
+import { snap } from './intents/snap';
+import { snapToIntersection } from './intents/snap-to-intersection';
+import { snapToLine } from './intents/snap-to-line';
+import { snapToPoint } from './intents/snap-to-point';
 import { splitLine } from './intents/split-line';
 import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
 import { stampShape } from './intents/stamp-shape';
+import { toggleSnap } from './intents/toggle-snap';
 import { translateBoundingBox } from './intents/translate-bounding-box';
 import { distance, isRectangle } from './math';
 import {
@@ -29,6 +34,7 @@ import {
   updateBoundingBox,
 } from './polygon';
 import * as shapes from './shapes';
+import { applySnapToPointer, clearSnapState, updateSnapState } from './snap-utils';
 import type {
   ActionIntent,
   InputShape,
@@ -81,6 +87,7 @@ const transitionIntents = [
   drawShape,
   selectMultiplePoints,
   stampShape,
+  snap,
 ];
 const transitionIntentsLength = transitionIntents.length;
 
@@ -114,6 +121,7 @@ const keyIntents = [
   nudgeUp,
   nudgeDown,
   deletePoint,
+  toggleSnap,
 ];
 
 type UndoStackItem = {
@@ -189,6 +197,13 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     },
     // Set the current tool
     currentTool: initialTool,
+    // Snapping configuration
+    snapEnabled: true,
+    snapToPoints: true,
+    snapToLines: true,
+    snapToIntersections: true,
+    snapToGrid: false,
+    snapToParallel: true,
   };
 
   // This is state that will change frequently, and used in the clock-managed render function.
@@ -221,6 +236,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     panOffset: { x: 0, y: 0 },
     isPanning: false,
     panStart: null,
+    snapTargets: [],
+    activeSnapGuides: [],
+    snapThreshold: 15,
+    isSnapping: false,
+    snapPoint: null,
   };
 
   // This is state held internally to the helper.
@@ -660,7 +680,16 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     if (!pointer || !isDrawing() || state.slowState.noShape) return;
 
     const point = state.selectedPoints[0];
-    state.line = [state.polygon.points[point], pointer];
+    let snappedPointer = pointer;
+
+    if (state.slowState.snapEnabled && !state.slowState.modifiers.Shift) {
+      updateSnapState(pointer, state, 5);
+      snappedPointer = applySnapToPointer(pointer, state);
+    } else {
+      clearSnapState(state);
+    }
+
+    state.line = [state.polygon.points[point], snappedPointer];
 
     if (state.slowState.modifiers.Shift) {
       // Previous point will be used to give an angle offset to snap to.
@@ -1768,10 +1797,59 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     modes,
     label,
     tools,
+    snap: {
+      enabled: () => state.slowState.snapEnabled,
+      enable: () => setState({ snapEnabled: true }),
+      disable: () => setState({ snapEnabled: false }),
+      toggle: () => setState({ snapEnabled: !state.slowState.snapEnabled }),
+
+      // Point snapping
+      pointsEnabled: () => state.slowState.snapToPoints,
+      enablePoints: () => setState({ snapToPoints: true }),
+      disablePoints: () => setState({ snapToPoints: false }),
+      togglePoints: () => setState({ snapToPoints: !state.slowState.snapToPoints }),
+
+      // Line snapping
+      linesEnabled: () => state.slowState.snapToLines,
+      enableLines: () => setState({ snapToLines: true }),
+      disableLines: () => setState({ snapToLines: false }),
+      toggleLines: () => setState({ snapToLines: !state.slowState.snapToLines }),
+
+      // Intersection snapping
+      intersectionsEnabled: () => state.slowState.snapToIntersections,
+      enableIntersections: () => setState({ snapToIntersections: true }),
+      disableIntersections: () => setState({ snapToIntersections: false }),
+      toggleIntersections: () => setState({ snapToIntersections: !state.slowState.snapToIntersections }),
+
+      // Grid snapping (for future use)
+      gridEnabled: () => state.slowState.snapToGrid,
+      enableGrid: () => setState({ snapToGrid: true }),
+      disableGrid: () => setState({ snapToGrid: false }),
+      toggleGrid: () => setState({ snapToGrid: !state.slowState.snapToGrid }),
+
+      // Parallel snapping
+      parallelEnabled: () => state.slowState.snapToParallel,
+      enableParallel: () => setState({ snapToParallel: true }),
+      disableParallel: () => setState({ snapToParallel: false }),
+      toggleParallel: () => setState({ snapToParallel: !state.slowState.snapToParallel }),
+
+      // Threshold control
+      getThreshold: () => state.snapThreshold,
+      setThreshold: (threshold: number) => {
+        state.snapThreshold = Math.max(5, Math.min(50, threshold)); // Clamp between 5-50 pixels
+      },
+
+      // Snap state access
+      isActive: () => state.isSnapping,
+      getSnapPoint: () => state.snapPoint,
+      getActiveGuides: () => state.activeSnapGuides,
+      getTargets: () => state.snapTargets,
+    },
     // Include test function for debugging (in dev only)
     ...(process.env.NODE_ENV !== 'production' ? { testToolSystem } : {}),
   };
 }
 
+export * from './snap-utils';
 export * from './svg-helpers';
 export * from './types';

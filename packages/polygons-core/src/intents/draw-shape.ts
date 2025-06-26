@@ -1,5 +1,6 @@
 import { simplifyPolygon } from '../math';
 import type { Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const drawShape: TransitionIntent = {
@@ -22,7 +23,12 @@ export const drawShape: TransitionIntent = {
     state.transitionDraw = [];
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    state.transitionDraw.push(pointers[0]);
+    let currentPointer = pointers[0];
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3);
+      currentPointer = applySnapToPointer(currentPointer, state);
+    }
+    state.transitionDraw.push(currentPointer);
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     // Use a different simplification factor based on the tool

@@ -1,4 +1,5 @@
 import type { Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
 import type { ActionIntent, Modifiers, RenderState } from '../types';
 
 export const addOpenPoint: ActionIntent = {
@@ -27,13 +28,18 @@ export const addOpenPoint: ActionIntent = {
     return selected === 0 || selected === state.polygon.points.length - 1;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const pointer = state.line ? state.line[1] : pointers[0]!;
+    let pointer = state.line ? state.line[1] : pointers[0]!;
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(pointer, state, 3);
+      pointer = applySnapToPointer(pointer, state);
+    }
+
     const currentPoints = state.polygon.points;
 
     if (currentPoints.length === 0) {
       return {
         selectedPoints: [0],
-        points: [pointers[0]!],
+        points: [pointer],
       };
     }
 

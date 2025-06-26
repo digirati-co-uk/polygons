@@ -418,6 +418,66 @@ export default function MainPage() {
         )}
 
         <hr />
+        <h3>Snapping Controls</h3>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+            <button onClick={() => helper.snap.toggle()} style={helper.snap.enabled() ? selectedButton : undefined}>
+              {helper.snap.enabled() ? 'Disable' : 'Enable'} Snapping
+            </button>
+            <span>Threshold: {helper.snap.getThreshold()}px</span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+            <button
+              onClick={() => helper.snap.setThreshold(Math.max(5, helper.snap.getThreshold() - 5))}
+              disabled={helper.snap.getThreshold() <= 5}
+            >
+              -
+            </button>
+            <button
+              onClick={() => helper.snap.setThreshold(Math.min(50, helper.snap.getThreshold() + 5))}
+              disabled={helper.snap.getThreshold() >= 50}
+            >
+              +
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => helper.snap.togglePoints()}
+              style={helper.snap.pointsEnabled() ? selectedButton : undefined}
+              disabled={!helper.snap.enabled()}
+            >
+              Points
+            </button>
+            <button
+              onClick={() => helper.snap.toggleLines()}
+              style={helper.snap.linesEnabled() ? selectedButton : undefined}
+              disabled={!helper.snap.enabled()}
+            >
+              Lines
+            </button>
+            <button
+              onClick={() => helper.snap.toggleIntersections()}
+              style={helper.snap.intersectionsEnabled() ? selectedButton : undefined}
+              disabled={!helper.snap.enabled()}
+            >
+              Intersections
+            </button>
+            <button
+              onClick={() => helper.snap.toggleParallel()}
+              style={helper.snap.parallelEnabled() ? selectedButton : undefined}
+              disabled={!helper.snap.enabled()}
+            >
+              Parallel
+            </button>
+          </div>
+          {helper.snap.isActive() && (
+            <div style={{ fontSize: '12px', color: '#666', marginTop: 5 }}>
+              Active guides: {helper.snap.getActiveGuides().length} | Targets: {helper.snap.getTargets().length}
+            </div>
+          )}
+        </div>
+
+        <hr />
         <h3>Tool Information</h3>
         <div>
           Current Tool: <strong>{currentTool}</strong>
@@ -434,6 +494,28 @@ export default function MainPage() {
         <div>
           Shape: <strong>{helper.state.isOpen ? 'Open' : 'Closed'}</strong>
         </div>
+        <div>
+          Snapping: <strong>{helper.snap.enabled() ? 'Enabled' : 'Disabled'}</strong>
+          {helper.snap.enabled() && (
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              {' '}
+              (
+              {[
+                helper.snap.pointsEnabled() && 'Points',
+                helper.snap.linesEnabled() && 'Lines',
+                helper.snap.intersectionsEnabled() && 'Intersections',
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              )
+            </span>
+          )}
+        </div>
+        {helper.snap.isActive() && (
+          <div>
+            Active Snap: <strong>{helper.snap.getTargets()[0]?.type || 'None'}</strong>
+          </div>
+        )}
 
         <h3>Available Actions</h3>
         <div>Transition intent: {helper.label(state?.transitionIntentType)}</div>
@@ -450,6 +532,9 @@ export default function MainPage() {
               </li>
             ) : null,
           )}
+          <li>
+            <strong>`</strong>: Toggle Snapping
+          </li>
         </ul>
 
         <h3>Debug Information</h3>
@@ -534,6 +619,88 @@ export default function MainPage() {
                         />
                       );
                     })}
+
+                    {/* Render snap guides */}
+                    {helper.snap.isActive() &&
+                      helper.snap.getActiveGuides().map((guide, index) => {
+                        switch (guide.type) {
+                          case 'point':
+                            return (
+                              <circle
+                                key={`snap-point-${index}`}
+                                cx={guide.points[0][0]}
+                                cy={guide.points[0][1]}
+                                r="8"
+                                fill="none"
+                                stroke="#00ff00"
+                                strokeWidth="2"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            );
+                          case 'line':
+                            return (
+                              <g key={`snap-line-${index}`}>
+                                <line
+                                  x1={guide.points[0][0]}
+                                  y1={guide.points[0][1]}
+                                  x2={guide.points[1][0]}
+                                  y2={guide.points[1][1]}
+                                  stroke="#0080ff"
+                                  strokeWidth="3"
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                                <circle
+                                  cx={guide.points[2][0]}
+                                  cy={guide.points[2][1]}
+                                  r="4"
+                                  fill="#0080ff"
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                              </g>
+                            );
+                          case 'cross': {
+                            const [x, y] = guide.points[0];
+                            return (
+                              <g key={`snap-cross-${index}`}>
+                                <line
+                                  x1={x - 6}
+                                  y1={y - 6}
+                                  x2={x + 6}
+                                  y2={y + 6}
+                                  stroke="#ff8000"
+                                  strokeWidth="2"
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                                <line
+                                  x1={x - 6}
+                                  y1={y + 6}
+                                  x2={x + 6}
+                                  y2={y - 6}
+                                  stroke="#ff8000"
+                                  strokeWidth="2"
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                              </g>
+                            );
+                          }
+                          case 'parallel-line':
+                            return (
+                              <line
+                                key={`snap-parallel-${index}`}
+                                x1={guide.points[0][0]}
+                                y1={guide.points[0][1]}
+                                x2={guide.points[1][0]}
+                                y2={guide.points[1][1]}
+                                stroke="#ff00ff"
+                                strokeWidth="1"
+                                strokeDasharray="4 2"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            );
+                          default:
+                            return null;
+                        }
+                      })}
 
                     {editor}
                   </svg>

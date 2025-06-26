@@ -1,5 +1,22 @@
 import type { Point, Polygon } from './polygon';
 
+export interface SnapTarget {
+  type: 'point' | 'line' | 'intersection' | 'grid';
+  point: Point;
+  source?: {
+    pointIndex?: number;
+    lineIndex?: number;
+    polygon?: Polygon;
+  };
+  distance: number;
+}
+
+export interface SnapGuide {
+  type: 'point' | 'line' | 'cross';
+  points: Point[];
+  target: SnapTarget;
+}
+
 export interface RenderState {
   isOpen: boolean;
   scale: number;
@@ -29,6 +46,11 @@ export interface RenderState {
   panOffset: { x: number; y: number };
   isPanning: boolean;
   panStart: Point | null;
+  snapTargets: SnapTarget[];
+  activeSnapGuides: SnapGuide[];
+  snapThreshold: number;
+  isSnapping: boolean;
+  snapPoint: Point | null;
 }
 
 export interface SlowState {
@@ -60,6 +82,14 @@ export interface SlowState {
   // Tools (better modes)
   tools: Record<ValidTools, boolean>;
   currentTool: ValidTools;
+
+  // Snapping
+  snapEnabled: boolean;
+  snapToPoints: boolean;
+  snapToLines: boolean;
+  snapToIntersections: boolean;
+  snapToGrid: boolean;
+  snapToParallel: boolean;
 }
 
 /**

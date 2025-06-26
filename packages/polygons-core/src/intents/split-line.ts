@@ -1,4 +1,5 @@
 import type { Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const splitLine: TransitionIntent = {
@@ -26,13 +27,15 @@ export const splitLine: TransitionIntent = {
     return false;
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const starting = state.transitionOrigin!;
-    const [x, y] = pointers[0];
+    let currentPointer = pointers[0];
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3, state.closestLineIndex);
+      currentPointer = applySnapToPointer(currentPointer, state);
+    }
+
+    const [x, y] = currentPointer;
     const points = state.polygon.points;
     const transitionPoints: Point[] = [];
-
-    const dx = x - starting[0];
-    const dy = y - starting[1];
 
     for (let i = 0; i < points.length; i++) {
       transitionPoints.push(points[i]);
@@ -40,14 +43,27 @@ export const splitLine: TransitionIntent = {
       // Add the new point that we are transitioning _after_ the closest line.
       if (state.closestLineIndex === i) {
         const newPoint = state.closestLinePoint!;
-        transitionPoints.push([newPoint[0] + dx, newPoint[1] + dy]);
+        transitionPoints.push(newPoint);
       }
     }
     state.transitionPoints = transitionPoints;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    // @todo add new point after the closest line using the pointer position.
-    const newPoints = state.transitionPoints!;
+    let currentPointer = pointers[0];
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3);
+      currentPointer = applySnapToPointer(currentPointer, state);
+    }
+
+    const points = state.polygon.points;
+    const newPoints: Point[] = [];
+
+    for (let i = 0; i < points.length; i++) {
+      newPoints.push(points[i]);
+      if (state.closestLineIndex === i) {
+        newPoints.push(currentPointer);
+      }
+    }
 
     state.transitionPoints = null;
     state.transitionBoundingBox = null;
