@@ -1,7 +1,7 @@
 import type { Point, Polygon } from './polygon';
 
 export interface SnapTarget {
-  type: 'point' | 'line' | 'intersection' | 'grid';
+  type: 'point' | 'line' | 'parallel' | 'intersection' | 'grid';
   point: Point;
   source?: {
     pointIndex?: number;
@@ -12,7 +12,7 @@ export interface SnapTarget {
 }
 
 export interface SnapGuide {
-  type: 'point' | 'line' | 'cross';
+  type: 'point' | 'line' | 'cross' | 'parallel-line';
   points: Point[];
   target: SnapTarget;
 }

@@ -272,7 +272,7 @@ export function updateSnapState(
     return null;
   }
 
-  const snapTargets = findAllSnapTargets(pointer, state, undefined, excludeLineIndex);
+  const snapTargets = findAllSnapTargets(pointer, state, undefined);
 
   if (snapTargets.length === 0) {
     // No snap targets, clear snapping state
