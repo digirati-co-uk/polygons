@@ -198,7 +198,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     // Set the current tool
     currentTool: initialTool,
     // Snapping configuration
-    snapEnabled: true,
+    snapEnabled: false,
     snapToPoints: true,
     snapToLines: true,
     snapToIntersections: true,
@@ -1834,7 +1834,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       toggleParallel: () => setState({ snapToParallel: !state.slowState.snapToParallel }),
 
       // Threshold control
-      getThreshold: () => state.snapThreshold,
+      getThreshold: () => state.snapThreshold * state.slowState.modifiers.proximity,
       setThreshold: (threshold: number) => {
         state.snapThreshold = Math.max(5, Math.min(50, threshold)); // Clamp between 5-50 pixels
       },
