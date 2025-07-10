@@ -55,6 +55,8 @@ interface CreateHelperInput {
   points: Array<Point>;
   tool?: ValidTools;
   fixedAspectRatio?: boolean;
+  keyboardShortcutMapping?: Record<string, string>;
+  toolMap?: Record<string, ValidTools>;
 }
 
 /**
@@ -143,6 +145,19 @@ const BASE_PROXIMITY = 10;
 export function createHelper(input: CreateHelperInput | null, onSave: (input: CreateHelperInput) => void) {
   const fixedAspectRatio = input?.fixedAspectRatio || false;
   const initialTool = input?.tool || 'pointer';
+  const keyboardShortcutMapping = input?.keyboardShortcutMapping || {};
+  // Map keys to tools
+  const toolMap: Record<string, ValidTools> = {
+    V: 'pointer',
+    P: 'pen',
+    B: 'box',
+    L: 'lineBox',
+    S: 'stamp',
+    H: 'hand',
+    N: 'line',
+    D: 'pencil',
+    ...(input?.toolMap || {}),
+  };
 
   // This state will not change frequently.
   const slowState: SlowState = {
@@ -913,7 +928,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   // This will trigger key-based actions. It should be hooked up to
   // the container for the SVG element.
   const key = {
-    down(key: string) {
+    down(inputKey: string) {
+      const key = keyboardShortcutMapping[inputKey] || inputKey;
       if (key === 'Shift' || key === 'Alt' || key === 'Meta') {
         modifiers.set(key);
         return true;
@@ -935,18 +951,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       if (!state.slowState.modifiers.Meta && !state.slowState.modifiers.Alt && !state.slowState.transitioning) {
         const toolKey = key.toUpperCase();
 
-        // Map keys to tools
-        const toolMap: Record<string, ValidTools> = {
-          V: 'pointer',
-          P: 'pen',
-          B: 'box',
-          L: 'lineBox',
-          S: 'stamp',
-          H: 'hand',
-          N: 'line',
-          D: 'pencil',
-        };
-
         if (toolMap[toolKey]) {
           const newTool = toolMap[toolKey];
 
@@ -962,7 +966,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
       return triggerKeyAction(key);
     },
-    up(key: string) {
+    up(inputKey: string) {
+      const key = keyboardShortcutMapping[inputKey] || inputKey;
       if (key === 'Control') {
         modifiers.unset('Meta');
         return;
