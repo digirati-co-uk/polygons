@@ -899,13 +899,15 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   const stamps = {
     set(selectedStamp: InputShape | null) {
-      setState({
-        selectedStamp,
-        boxMode: selectedStamp ? selectedStamp.id === 'square' || selectedStamp.id === 'rectangle' : false,
-      });
+      const isBox = selectedStamp ? selectedStamp.id === 'square' || selectedStamp.id === 'rectangle' : false;
+      if (state.slowState.currentTool !== 'stamp') {
+        setTool(isBox ? 'box' : 'stamp');
+      }
+      setState({ selectedStamp });
     },
     clear() {
       stamps.set(null);
+      setTool('pointer');
     },
     square() {
       stamps.set(shapes.square);
@@ -1389,45 +1391,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
         state.selectedPoints.length === state.polygon.points.length &&
         !state.isOpen);
 
-    // Set appropriate cursor for each tool
-    // let cursor = 'default';
-    // switch (tool) {
-    //   case 'hand':
-    //     cursor = state.slowState.transitioning ? 'grabbing' : 'grab';
-    //     break;
-    //   case 'pointer':
-    //     if (state.slowState.selectedPoints.length > 0) {
-    //       cursor = 'move';
-    //     } else if (state.slowState.pointerInsideShape) {
-    //       cursor = 'pointer';
-    //     } else {
-    //       cursor = 'default';
-    //     }
-    //     break;
-    //   case 'pen':
-    //     if (state.slowState.closestPoint !== null) {
-    //       cursor = 'pointer';
-    //     } else if (state.slowState.hasClosestLine) {
-    //       cursor = 'crosshair';
-    //     } else {
-    //       cursor = 'crosshair';
-    //     }
-    //     break;
-    //   case 'box':
-    //   case 'lineBox':
-    //     cursor = 'crosshair';
-    //     break;
-    //   case 'stamp':
-    //     cursor = 'copy';
-    //     break;
-    //   case 'pencil':
-    //     cursor = 'pencil';
-    //     break;
-    //   case 'line':
-    //     cursor = 'crosshair';
-    //     break;
-    // }
-
     // Update state with visibility settings
     setState({
       showBoundingBox: shouldShowBoundingBox,
@@ -1454,17 +1417,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     } else {
       // Switch to the requested tool
       setTool(tool);
-    }
-  }
-
-  // Smart tool switching based on context
-  function switchToAppropriateEditingTool() {
-    if (state.selectedPoints.length > 0) {
-      setTool('pointer');
-    } else if (state.isOpen) {
-      setTool('pen');
-    } else {
-      setTool('pointer');
     }
   }
 
@@ -1495,16 +1447,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       return state.slowState.cursor;
     },
     // Tool keyboard shortcut info
-    shortcuts: {
-      pointer: 'V', // Selection tool
-      pen: 'P', // Pen tool
-      box: 'B', // Box tool
-      lineBox: 'L', // Line box tool
-      stamp: 'S', // Stamp tool
-      hand: 'H', // Hand tool (pan)
-      pencil: 'D', // Pencil tool shortcut
-      line: 'N', // Line tool
-    },
+    shortcuts: Object.fromEntries(Object.entries(toolMap).map(([key, value]) => [value, key])),
     // Get the current pan offset
     get panOffset() {
       return state.panOffset;
@@ -1572,6 +1515,55 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     },
   };
 
+  const snap = {
+    enabled: () => state.slowState.snapEnabled,
+    enable: () => setState({ snapEnabled: true }),
+    disable: () => setState({ snapEnabled: false }),
+    toggle: () => setState({ snapEnabled: !state.slowState.snapEnabled }),
+
+    // Point snapping
+    pointsEnabled: () => state.slowState.snapToPoints,
+    enablePoints: () => setState({ snapToPoints: true }),
+    disablePoints: () => setState({ snapToPoints: false }),
+    togglePoints: () => setState({ snapToPoints: !state.slowState.snapToPoints }),
+
+    // Line snapping
+    linesEnabled: () => state.slowState.snapToLines,
+    enableLines: () => setState({ snapToLines: true }),
+    disableLines: () => setState({ snapToLines: false }),
+    toggleLines: () => setState({ snapToLines: !state.slowState.snapToLines }),
+
+    // Intersection snapping
+    intersectionsEnabled: () => state.slowState.snapToIntersections,
+    enableIntersections: () => setState({ snapToIntersections: true }),
+    disableIntersections: () => setState({ snapToIntersections: false }),
+    toggleIntersections: () => setState({ snapToIntersections: !state.slowState.snapToIntersections }),
+
+    // Grid snapping (for future use)
+    gridEnabled: () => state.slowState.snapToGrid,
+    enableGrid: () => setState({ snapToGrid: true }),
+    disableGrid: () => setState({ snapToGrid: false }),
+    toggleGrid: () => setState({ snapToGrid: !state.slowState.snapToGrid }),
+
+    // Parallel snapping
+    parallelEnabled: () => state.slowState.snapToParallel,
+    enableParallel: () => setState({ snapToParallel: true }),
+    disableParallel: () => setState({ snapToParallel: false }),
+    toggleParallel: () => setState({ snapToParallel: !state.slowState.snapToParallel }),
+
+    // Threshold control
+    getThreshold: () => state.snapThreshold * state.slowState.modifiers.proximity,
+    setThreshold: (threshold: number) => {
+      state.snapThreshold = Math.max(5, Math.min(50, threshold)); // Clamp between 5-50 pixels
+    },
+
+    // Snap state access
+    isActive: () => state.isSnapping,
+    getSnapPoint: () => state.snapPoint,
+    getActiveGuides: () => state.activeSnapGuides,
+    getTargets: () => state.snapTargets,
+  };
+
   // Initialize tool system
   setTool(initialTool);
 
@@ -1590,54 +1582,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     setShape,
     label,
     tools,
-    snap: {
-      enabled: () => state.slowState.snapEnabled,
-      enable: () => setState({ snapEnabled: true }),
-      disable: () => setState({ snapEnabled: false }),
-      toggle: () => setState({ snapEnabled: !state.slowState.snapEnabled }),
+    snap,
 
-      // Point snapping
-      pointsEnabled: () => state.slowState.snapToPoints,
-      enablePoints: () => setState({ snapToPoints: true }),
-      disablePoints: () => setState({ snapToPoints: false }),
-      togglePoints: () => setState({ snapToPoints: !state.slowState.snapToPoints }),
-
-      // Line snapping
-      linesEnabled: () => state.slowState.snapToLines,
-      enableLines: () => setState({ snapToLines: true }),
-      disableLines: () => setState({ snapToLines: false }),
-      toggleLines: () => setState({ snapToLines: !state.slowState.snapToLines }),
-
-      // Intersection snapping
-      intersectionsEnabled: () => state.slowState.snapToIntersections,
-      enableIntersections: () => setState({ snapToIntersections: true }),
-      disableIntersections: () => setState({ snapToIntersections: false }),
-      toggleIntersections: () => setState({ snapToIntersections: !state.slowState.snapToIntersections }),
-
-      // Grid snapping (for future use)
-      gridEnabled: () => state.slowState.snapToGrid,
-      enableGrid: () => setState({ snapToGrid: true }),
-      disableGrid: () => setState({ snapToGrid: false }),
-      toggleGrid: () => setState({ snapToGrid: !state.slowState.snapToGrid }),
-
-      // Parallel snapping
-      parallelEnabled: () => state.slowState.snapToParallel,
-      enableParallel: () => setState({ snapToParallel: true }),
-      disableParallel: () => setState({ snapToParallel: false }),
-      toggleParallel: () => setState({ snapToParallel: !state.slowState.snapToParallel }),
-
-      // Threshold control
-      getThreshold: () => state.snapThreshold * state.slowState.modifiers.proximity,
-      setThreshold: (threshold: number) => {
-        state.snapThreshold = Math.max(5, Math.min(50, threshold)); // Clamp between 5-50 pixels
-      },
-
-      // Snap state access
-      isActive: () => state.isSnapping,
-      getSnapPoint: () => state.snapPoint,
-      getActiveGuides: () => state.activeSnapGuides,
-      getTargets: () => state.snapTargets,
-    },
+    lockAspectRatio,
+    unlockAspectRatio,
   };
 }
 
