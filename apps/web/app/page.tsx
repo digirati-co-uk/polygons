@@ -332,7 +332,7 @@ export default function MainPage() {
             <h3>Box Tool Options</h3>
             <button
               onClick={() => {
-                helper.modes.lockAspectRatio();
+                helper.lockAspectRatio();
               }}
               style={state?.fixedAspectRatio ? selectedButton : undefined}
             >
@@ -340,7 +340,7 @@ export default function MainPage() {
             </button>
             <button
               onClick={() => {
-                helper.modes.unlockAspectRatio();
+                helper.unlockAspectRatio();
               }}
               style={!state?.fixedAspectRatio ? selectedButton : undefined}
             >

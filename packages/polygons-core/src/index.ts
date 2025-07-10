@@ -351,7 +351,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       });
       internals.shouldUpdate = false;
     }
-    // console.log(internals.nextSlowState, state.slowState);
+
     if (internals.nextSlowState && internals.nextSlowState !== state.slowState) {
       const keys = Object.keys(state.slowState) as Array<keyof SlowState>;
       const nextState: Record<string, any> = {};
@@ -648,6 +648,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     // This is a box that is extended from 2 points.
     const pointer = state.pointer;
     state.lineBox = null;
+
     if (!pointer || isDrawing()) return;
     if (state.polygon.points.length !== 2) return;
 
@@ -813,11 +814,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     // Check if the intent is valid in the current state
     const result = intent.isValid(pointers, state, getModifiers());
 
-    // For debugging - log valid intents
-    if (result && process.env.NODE_ENV !== 'production') {
-      console.debug(`Valid intent for ${state.slowState.currentTool}: ${intent.type} - ${intent.label}`);
-    }
-
     return result;
   }
 
@@ -900,14 +896,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   const stamps = {
     set(selectedStamp: InputShape | null) {
       const isBox = selectedStamp ? selectedStamp.id === 'square' || selectedStamp.id === 'rectangle' : false;
-      if (state.slowState.currentTool !== 'stamp') {
-        setTool(isBox ? 'box' : 'stamp');
-      }
-      setState({ selectedStamp });
+      setState({ selectedStamp, boxMode: isBox });
     },
     clear() {
       stamps.set(null);
-      setTool('pointer');
     },
     square() {
       stamps.set(shapes.square);
@@ -955,11 +947,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
         if (toolMap[toolKey]) {
           const newTool = toolMap[toolKey];
-
-          // Log tool change (only in non-production)
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug(`Tool change: ${state.slowState.currentTool} -> ${newTool} (via keyboard)`);
-          }
 
           setTool(newTool);
           return true;
@@ -1371,11 +1358,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
     // Update UI with current valid intents
     updateCurrentIntent();
-
-    // Log tool change (only in non-production)
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug(`Tool changed: ${tool}, selectedPoints: ${selectedPoints.length}, isOpen: ${isOpen}`);
-    }
   }
 
   /**

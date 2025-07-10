@@ -5,7 +5,7 @@ import type { ActionIntent, Modifiers, RenderState } from '../types';
 export const addOpenPoint: ActionIntent = {
   type: 'add-open-point',
   label: 'Add point',
-  tools: ['pen', 'line'],
+  tools: ['pen', 'line', 'lineBox'],
   trigger: { type: 'click' },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (!state.isOpen) {
@@ -20,7 +20,10 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
-    if (state.polygon.points.length >= 2 && state.slowState.tools.line) {
+    if (
+      state.polygon.points.length >= 2 &&
+      (state.slowState.currentTool === 'line' || state.slowState.currentTool === 'lineBox')
+    ) {
       return false;
     }
 
@@ -50,7 +53,7 @@ export const addOpenPoint: ActionIntent = {
     }
 
     const selected = state.selectedPoints[0];
-    const lineMode = state.slowState.currentTool === 'line';
+    const lineMode = state.slowState.currentTool === 'line' || state.slowState.currentTool === 'lineBox';
 
     if (selected === 0) {
       return {
