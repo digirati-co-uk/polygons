@@ -7,7 +7,8 @@ export const splitLine: TransitionIntent = {
   label: 'Split line',
   tools: ['pen'],
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
-    if (modifiers.Meta || state.slowState.lineMode) {
+    const lineMode = state.slowState.currentTool === 'line';
+    if (modifiers.Meta || lineMode) {
       return false;
     }
 
@@ -33,9 +34,13 @@ export const splitLine: TransitionIntent = {
       currentPointer = applySnapToPointer(currentPointer, state);
     }
 
+    const starting = state.transitionOrigin || currentPointer;
     const [x, y] = currentPointer;
     const points = state.polygon.points;
     const transitionPoints: Point[] = [];
+
+    const dx = x - starting[0];
+    const dy = y - starting[1];
 
     for (let i = 0; i < points.length; i++) {
       transitionPoints.push(points[i]);
@@ -43,28 +48,13 @@ export const splitLine: TransitionIntent = {
       // Add the new point that we are transitioning _after_ the closest line.
       if (state.closestLineIndex === i) {
         const newPoint = state.closestLinePoint!;
-        transitionPoints.push(newPoint);
+        transitionPoints.push([newPoint[0] + dx, newPoint[1] + dy]);
       }
     }
     state.transitionPoints = transitionPoints;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    let currentPointer = pointers[0];
-    if (!modifiers.Shift && state.slowState.snapEnabled) {
-      updateSnapState(currentPointer, state, 3);
-      currentPointer = applySnapToPointer(currentPointer, state);
-    }
-
-    const points = state.polygon.points;
-    const newPoints: Point[] = [];
-
-    for (let i = 0; i < points.length; i++) {
-      newPoints.push(points[i]);
-      if (state.closestLineIndex === i) {
-        newPoints.push(currentPointer);
-      }
-    }
-
+    const newPoints = state.transitionPoints!;
     state.transitionPoints = null;
     state.transitionBoundingBox = null;
 

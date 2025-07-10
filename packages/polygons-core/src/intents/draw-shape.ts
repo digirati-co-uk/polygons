@@ -11,7 +11,7 @@ export const drawShape: TransitionIntent = {
     Alt: 'Freehand drawing',
   },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const shouldDraw = modifiers.Alt || state.slowState.drawMode || state.slowState.currentTool === 'pencil';
+    const shouldDraw = modifiers.Alt || state.slowState.currentTool === 'pencil';
     if (state.isOpen && (state.line || state.polygon.points.length === 0) && shouldDraw) {
       return true;
     }

@@ -95,18 +95,6 @@ export default function MainPage() {
     helper.tools.setTool(tool);
   };
 
-  const toggleLineMode = () => {
-    helper.modes.toggleLineMode();
-  };
-
-  const toggleLineBoxMode = () => {
-    helper.modes.toggleLineBoxMode();
-  };
-
-  const toggleBoxMode = () => {
-    helper.modes.toggleBoxMode();
-  };
-
   const addShape = () => {
     dispatch({ type: 'add-shape' });
   };
@@ -162,10 +150,6 @@ export default function MainPage() {
     if (resp) {
       e.preventDefault();
     }
-  };
-
-  const toggleDrawMode = () => {
-    helper.draw.toggle();
   };
 
   // Use cursor from the tool system
@@ -316,7 +300,6 @@ export default function MainPage() {
         {currentTool === 'pen' && (
           <div>
             <h3>Pen Tool Options</h3>
-            <button onClick={toggleDrawMode}>{state?.drawMode ? 'Standard Mode' : 'Draw Mode'}</button>
             <p>
               {helper.state.selectedPoints && helper.state.selectedPoints.length > 0
                 ? `Selected ${helper.state.selectedPoints.length} point(s)`
@@ -335,7 +318,6 @@ export default function MainPage() {
         {currentTool === 'line' && (
           <div>
             <h3>Line Tool Options</h3>
-            <button onClick={toggleLineMode}>{state?.lineMode ? 'Disable' : 'Enable'} Line mode</button>
             <p>
               {helper.state.selectedPoints && helper.state.selectedPoints.length > 0
                 ? `Selected ${helper.state.selectedPoints.length} point(s)`
@@ -345,16 +327,9 @@ export default function MainPage() {
             </p>
           </div>
         )}
-        {currentTool === 'lineBox' && (
-          <div>
-            <h3>Line Box Tool Options</h3>
-            <button onClick={toggleLineBoxMode}>{state?.lineBoxMode ? 'Disable' : 'Enable'} Line box mode</button>
-          </div>
-        )}
         {currentTool === 'box' && (
           <div>
             <h3>Box Tool Options</h3>
-            <button onClick={toggleBoxMode}>{state?.boxMode ? 'Disable' : 'Enable'} Box mode</button>
             <button
               onClick={() => {
                 helper.modes.lockAspectRatio();

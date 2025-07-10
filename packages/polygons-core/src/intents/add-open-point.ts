@@ -50,10 +50,11 @@ export const addOpenPoint: ActionIntent = {
     }
 
     const selected = state.selectedPoints[0];
+    const lineMode = state.slowState.currentTool === 'line';
 
     if (selected === 0) {
       return {
-        selectedPoints: state.slowState.lineMode ? [] : [0],
+        selectedPoints: lineMode ? [] : [0],
         points: [pointer, ...currentPoints],
       };
     }
@@ -61,7 +62,7 @@ export const addOpenPoint: ActionIntent = {
     state.line = null;
 
     return {
-      selectedPoints: state.slowState.lineMode ? [] : [currentPoints.length],
+      selectedPoints: lineMode ? [] : [currentPoints.length],
       points: [...currentPoints, pointer],
     };
   },

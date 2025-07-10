@@ -66,7 +66,6 @@ export interface SlowState {
   modifiers: Modifiers;
   showBoundingBox: boolean;
   pointerInsideShape: boolean;
-  drawMode: boolean;
   closestPoint: null | number;
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;
@@ -74,8 +73,6 @@ export interface SlowState {
   cursor: string;
 
   // Modes.
-  lineMode: boolean;
-  lineBoxMode: boolean;
   boxMode: boolean;
   fixedAspectRatio: boolean;
 
