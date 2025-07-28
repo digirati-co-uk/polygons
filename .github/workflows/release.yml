@@ -35,8 +35,8 @@ jobs:
             ${{ runner.os }}-18-pnpm-store-
 
       - run: pnpm i --frozen-lockfile
-      - run: pnpm run build
-      - run: pnpm run test
+      - run: pnpm run prepack
+        working-directory: packages/polygons-core/npm
 
   release:
     needs: [build]
