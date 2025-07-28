@@ -1,10 +1,12 @@
-import { Modifiers, RenderState, TransitionIntent } from '../types';
-import { closestVertex, Point } from '../polygon';
+import { closestVertex, type Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 import { boundingBoxCorners } from './bounding-box-corners';
 
 export const movePoint: TransitionIntent = {
   type: 'move-point',
   label: 'Move point',
+  tools: ['pointer', 'pen', 'line'],
   modifiers: {
     Shift: 'Constrain to axis',
   },
@@ -47,7 +49,10 @@ export const movePoint: TransitionIntent = {
   },
   start(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (state.slowState.boxMode) {
-      return boundingBoxCorners.start(pointers, state, modifiers)
+      if (boundingBoxCorners.start) {
+        return boundingBoxCorners.start(pointers, state, modifiers);
+      }
+      return;
     }
     if (state.selectedPoints.length < 2) {
       // We select the closest point.
@@ -69,11 +74,19 @@ export const movePoint: TransitionIntent = {
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (state.slowState.boxMode) {
-      return boundingBoxCorners.transition(pointers, state, modifiers)
+      return boundingBoxCorners.transition(pointers, state, modifiers);
     }
     // Translate the selected points
     const starting = state.transitionOrigin!;
-    const [x, y] = pointers[0];
+    let currentPointer = pointers[0];
+
+    // Update snapping state and apply snap if available (unless Shift is pressed)
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3); // Show up to 3 snap guides
+      currentPointer = applySnapToPointer(currentPointer, state);
+    }
+
+    const [x, y] = currentPointer;
     const points = state.polygon.points;
     let selectedPoints = state.selectedPoints;
 
@@ -89,7 +102,7 @@ export const movePoint: TransitionIntent = {
     let dx = x - starting[0];
     let dy = y - starting[1];
 
-    if (modifiers.Shift) {
+    if (modifiers.Shift && !state.slowState.snapEnabled) {
       if (Math.abs(dx) > Math.abs(dy)) {
         dy = 0;
       } else {
@@ -114,7 +127,7 @@ export const movePoint: TransitionIntent = {
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (state.slowState.boxMode) {
-      return boundingBoxCorners.commit(pointers, state, modifiers)
+      return boundingBoxCorners.commit(pointers, state, modifiers);
     }
     const newPoints = state.transitionPoints!;
 

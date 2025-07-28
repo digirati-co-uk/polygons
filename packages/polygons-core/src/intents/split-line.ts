@@ -1,17 +1,16 @@
-import { Modifiers, RenderState, TransitionIntent } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
+import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
 export const splitLine: TransitionIntent = {
   type: 'split-line',
   label: 'Split line',
+  tools: ['pen'],
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
-    if (modifiers.Meta || state.slowState.lineMode) {
+    const lineMode = state.slowState.currentTool === 'line';
+    if (modifiers.Meta || lineMode) {
       return false;
     }
-    if (state.slowState.boxMode) {
-      return false;
-    }
-    // if (!state.isOpen) return false;
 
     // Are we within X pixels of a line
     if (state.closestLinePoint && state.closestLineDistance < modifiers.proximity) {
@@ -29,8 +28,14 @@ export const splitLine: TransitionIntent = {
     return false;
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const starting = state.transitionOrigin!;
-    const [x, y] = pointers[0];
+    let currentPointer = pointers[0];
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3, state.closestLineIndex);
+      currentPointer = applySnapToPointer(currentPointer, state);
+    }
+
+    const starting = state.transitionOrigin || currentPointer;
+    const [x, y] = currentPointer;
     const points = state.polygon.points;
     const transitionPoints: Point[] = [];
 
@@ -49,9 +54,7 @@ export const splitLine: TransitionIntent = {
     state.transitionPoints = transitionPoints;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    // @todo add new point after the closest line using the pointer position.
     const newPoints = state.transitionPoints!;
-
     state.transitionPoints = null;
     state.transitionBoundingBox = null;
 

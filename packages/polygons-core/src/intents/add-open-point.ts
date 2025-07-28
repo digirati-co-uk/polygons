@@ -1,16 +1,14 @@
-import { ActionIntent, Modifiers, RenderState } from '../types';
-import { Point } from '../polygon';
+import type { Point } from '../polygon';
+import { applySnapToPointer, updateSnapState } from '../snap-utils';
+import type { ActionIntent, Modifiers, RenderState } from '../types';
 
 export const addOpenPoint: ActionIntent = {
   type: 'add-open-point',
   label: 'Add point',
+  tools: ['pen', 'line', 'lineBox'],
   trigger: { type: 'click' },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (!state.isOpen) {
-      return false;
-    }
-
-    if (state.slowState.boxMode) {
       return false;
     }
 
@@ -22,7 +20,10 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
-    if (state.polygon.points.length >= 2 && state.slowState.lineMode) {
+    if (
+      state.polygon.points.length >= 2 &&
+      (state.slowState.currentTool === 'line' || state.slowState.currentTool === 'lineBox')
+    ) {
       return false;
     }
 
@@ -30,13 +31,18 @@ export const addOpenPoint: ActionIntent = {
     return selected === 0 || selected === state.polygon.points.length - 1;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const pointer = state.line ? state.line[1] : pointers[0]!;
+    let pointer = state.line ? state.line[1] : pointers[0]!;
+    if (!modifiers.Shift && state.slowState.snapEnabled) {
+      updateSnapState(pointer, state, 3);
+      pointer = applySnapToPointer(pointer, state);
+    }
+
     const currentPoints = state.polygon.points;
 
     if (currentPoints.length === 0) {
       return {
         selectedPoints: [0],
-        points: [pointers[0]!],
+        points: [pointer],
       };
     }
 
@@ -47,10 +53,11 @@ export const addOpenPoint: ActionIntent = {
     }
 
     const selected = state.selectedPoints[0];
+    const lineMode = state.slowState.currentTool === 'line' || state.slowState.currentTool === 'lineBox';
 
     if (selected === 0) {
       return {
-        selectedPoints: state.slowState.lineMode ? [] : [0],
+        selectedPoints: lineMode ? [] : [0],
         points: [pointer, ...currentPoints],
       };
     }
@@ -58,7 +65,7 @@ export const addOpenPoint: ActionIntent = {
     state.line = null;
 
     return {
-      selectedPoints: state.slowState.lineMode ? [] : [currentPoints.length],
+      selectedPoints: lineMode ? [] : [currentPoints.length],
       points: [...currentPoints, pointer],
     };
   },

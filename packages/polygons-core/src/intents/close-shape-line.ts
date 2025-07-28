@@ -1,10 +1,11 @@
-import { ActionIntent } from '../types';
+import type { ActionIntent } from '../types';
 import { closeShape } from './close-shape';
 
 export const closeShapeLine: ActionIntent = {
   type: 'close-shape-line',
   label: 'Close shape line',
   trigger: { type: 'click' },
+  tools: ['pen'],
   isValid(pointers, state, modifiers) {
     // Closed shape.
     if (!state.isOpen) {
@@ -19,7 +20,7 @@ export const closeShapeLine: ActionIntent = {
       return false;
     }
 
-    if (!state.closestLinePoint || state.closestLineDistance >= modifiers.proximity) {
+    if (!state.closestLinePoint || state.closestLineDistance >= modifiers.proximity * 2) {
       return false;
     }
 

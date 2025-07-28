@@ -1,10 +1,12 @@
-import { TransitionIntent } from '../types';
+import type { TransitionIntent } from '../types';
 
 export const selectMultiplePoints: TransitionIntent = {
   type: 'select-multiple-points',
   label: 'Drag to select multiple points',
+  tools: ['pointer', 'pen'],
   isValid(pointers, state, modifiers) {
-    if (state.slowState.lineMode && state.polygon.points.length >= 2) {
+    const lineMode = state.slowState.currentTool === 'line';
+    if (lineMode && state.polygon.points.length >= 2) {
       return true;
     }
     if (state.slowState.boxMode) {

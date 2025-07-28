@@ -1,4 +1,21 @@
-import { Point, Polygon } from './polygon';
+import type { Point, Polygon } from './polygon';
+
+export interface SnapTarget {
+  type: 'point' | 'line' | 'parallel' | 'intersection' | 'grid';
+  point: Point;
+  source?: {
+    pointIndex?: number;
+    lineIndex?: number;
+    polygon?: Polygon;
+  };
+  distance: number;
+}
+
+export interface SnapGuide {
+  type: 'point' | 'line' | 'cross' | 'parallel-line';
+  points: Point[];
+  target: SnapTarget;
+}
 
 export interface RenderState {
   isOpen: boolean;
@@ -9,7 +26,13 @@ export interface RenderState {
   lineBox: null | [Point, Point, Point, Point];
   line: null | [Point, Point];
   transitionOrigin: null | Point;
-  transitionBoundingBox: null | { x: number; y: number; width: number; height: number; rotation?: number };
+  transitionBoundingBox: null | {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation?: number;
+  };
   transitionRotate: boolean;
   selectionBox: null | { x: number; y: number; width: number; height: number };
   pointer: null | Point;
@@ -20,6 +43,14 @@ export interface RenderState {
   transitionBezierLine: null | [Point, Point];
   slowState: SlowState;
   transitionDraw: Point[];
+  panOffset: { x: number; y: number };
+  isPanning: boolean;
+  panStart: Point | null;
+  snapTargets: SnapTarget[];
+  activeSnapGuides: SnapGuide[];
+  snapThreshold: number;
+  isSnapping: boolean;
+  snapPoint: Point | null;
 }
 
 export interface SlowState {
@@ -35,18 +66,44 @@ export interface SlowState {
   modifiers: Modifiers;
   showBoundingBox: boolean;
   pointerInsideShape: boolean;
-  drawMode: boolean;
   closestPoint: null | number;
   transitionModifiers: Record<string, string> | null;
   selectedStamp: null | InputShape;
   bezierLines: [number, Point, Point][];
+  cursor: string;
 
   // Modes.
-  lineMode: boolean;
-  lineBoxMode: boolean;
   boxMode: boolean;
   fixedAspectRatio: boolean;
+
+  // Tools (better modes)
+  tools: Record<ValidTools, boolean>;
+  currentTool: ValidTools;
+
+  // Snapping
+  snapEnabled: boolean;
+  snapToPoints: boolean;
+  snapToLines: boolean;
+  snapToIntersections: boolean;
+  snapToGrid: boolean;
+  snapToParallel: boolean;
 }
+
+/**
+ * Tools are are used to interact in different ways.
+ *
+ * You MIGHT have more than one tool enabled, for example if you are using the pen tool
+ * you might select a few points and move them (pointer) and then when you deselect the
+ * points you are back to the pen tool.
+ *
+ * The "Hand" and "Pointer" tools work in this way.
+ *
+ * Another example might be selecting points with pointer and then switching to the draw tool.
+ * This would work by taken the first and last points selected and replacing them with what you draw
+ * in the middle.
+ *
+ */
+export type ValidTools = 'line' | 'hand' | 'pointer' | 'lineBox' | 'stamp' | 'box' | 'pen' | 'pencil';
 
 export type InputShape = {
   id?: string;
@@ -71,11 +128,12 @@ export interface TransitionIntent {
   type: string;
   label: string;
   modifiers?: Record<string, string>;
+  tools: ValidTools[];
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean;
   start?(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers
+    modifiers: Modifiers,
   ): {
     isOpen?: boolean;
     points?: Point[];
@@ -85,8 +143,8 @@ export interface TransitionIntent {
   commit(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers
-  ): { selectedPoints?: number[]; points?: Point[]; isOpen?: boolean } | void;
+    modifiers: Modifiers,
+  ): { selectedPoints?: number[]; points?: Point[]; isOpen?: boolean; tool?: ValidTools } | void;
 }
 
 export interface ActionIntent {
@@ -94,14 +152,16 @@ export interface ActionIntent {
   label: string;
   trigger: { type: 'click' } | { type: 'key'; key: string };
   modifiers?: Record<string, string>;
+  tools: ValidTools[];
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean;
   commit(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers
+    modifiers: Modifiers,
   ): {
     selectedPoints?: number[];
     points?: Point[];
     isOpen?: boolean;
+    tool?: ValidTools;
   } | void;
 }

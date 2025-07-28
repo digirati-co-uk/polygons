@@ -1,137 +1,183 @@
-html, body {
-    padding: 0;
-    margin: 0;
-    height: 100vh;
-    overflow: hidden;
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .atlas-container {
-    --atlas-container-display: flex;
-    --atlas-container-height: 100%;
-    --atlas-container-flex: 1 1 0px;
-    --atlas-background:  #E5E7F0;
-    min-width: 0;
-    min-height: 0;
+  --atlas-container-display: flex;
+  --atlas-container-height: 100%;
+  --atlas-container-flex: 1 1 0px;
+  --atlas-background: #e5e7f0;
+  min-width: 0;
+  min-height: 0;
 }
 
 .poly-thumb svg {
-    max-width: 100px;
-    max-height: 100px;
-    border: 1px solid #E5E7F0;
+  max-width: 100px;
+  max-height: 100px;
+  border: 1px solid #e5e7f0;
 }
 .poly-thumb svg polygon {
-    fill: #a853ba;
+  fill: #a853ba;
 }
 
 .poly-thumb {
-    width: 100px;
+  width: 100px;
 }
 
-*, *:before, *:after {
-    box-sizing: border-box;
+*,
+*:before,
+*:after {
+  box-sizing: border-box;
 }
 
 .list-item {
-    cursor: pointer;
-    padding: 10px;
-    border: 2px solid #eee;
-    display: flex;
-    width: 100%;
-    align-items: center;
-    margin-top: 10px;
-    margin-bottom: 10px;
+  cursor: pointer;
+  padding: 10px;
+  border: 2px solid #eee;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .list-item--selected {
-    border-color: #2a8af6;
+  border-color: #2a8af6;
 }
 
 .list-item h3 {
-    flex: 1;
-    padding-left: 10px;
+  flex: 1;
+  padding-left: 10px;
 }
 
 ul {
-    margin: 0;
-    padding: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .controls {
-    fill: #fff;
-    stroke: #000;
-    stroke-width: 1px;
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 1px;
 }
 .controls:hover {
-    fill: pink;
+  fill: pink;
 }
 .controls--selected {
-    fill: red;
+  fill: red;
 }
 .controls--selected.controls--bounds {
-    opacity: 0.5;
-    fill: #fff;
+  opacity: 0.5;
+  fill: #fff;
 }
-
 
 .marker {
-    fill: #fff;
-    stroke: #000;
-    stroke-width: 2px;
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 2px;
 }
 
-
 .se {
-    cursor: se-resize;
+  cursor: se-resize;
 }
 
 .sw {
-    cursor: sw-resize;
+  cursor: sw-resize;
 }
 
 .ne {
-    cursor: ne-resize;
+  cursor: ne-resize;
 }
 
 .nw {
-    cursor: nw-resize;
+  cursor: nw-resize;
 }
 
 .move {
-    cursor: move;
+  cursor: move;
 }
 
 .crosshair {
-    cursor: crosshair;
+  cursor: crosshair;
 }
 
 .copy {
-    cursor: copy;
+  cursor: copy;
 }
 
 .rotate {
-    cursor: url("/cursor/rotate.png") 8 8, pointer;
+  cursor:
+    url("/cursor/rotate.png") 8 8,
+    pointer;
 }
 .draw {
-    cursor: url("/cursor/draw.png") 4 4, pointer;
+  cursor:
+    url("/cursor/draw.png") 4 4,
+    pointer;
 }
 
+/* Tool-specific cursors */
+/* .default {
+  cursor: default;
+}
+.pointer {
+  cursor: pointer;
+}
+.grab {
+  cursor: grab;
+}
+.grabbing {
+  cursor: grabbing;
+}
+.crosshair {
+  cursor: crosshair;
+}
+.pencil {
+  cursor:
+    url("/cursor/pencil.png") 4 4,
+    crosshair;
+} */
+
 .shape {
-    cursor: pointer;
-    fill: rgba(119, 24, 196, 0.25);
-    pointer-events: visible;
+  cursor: pointer;
+  fill: rgba(119, 24, 196, 0.25);
+  pointer-events: visible;
 }
 
 .shape:hover {
-    fill: rgba(119, 24, 196, 0.5);
+  fill: rgba(119, 24, 196, 0.5);
 }
 
 .shape-line {
-    stroke: rgba(119, 24, 196, 0.25);
-    stroke-width: 3px;
-    fill: none;
-    pointer-events: visible;
+  stroke: rgba(119, 24, 196, 0.25);
+  stroke-width: 3px;
+  fill: none;
+  pointer-events: visible;
 }
 
 .shape-line:hover {
-    stroke: rgba(119, 24, 196, 0.5);
+  stroke: rgba(119, 24, 196, 0.5);
+}
+
+/* Tool buttons */
+button {
+  padding: 5px 10px;
+  margin: 3px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+button:hover {
+  background: #e0e0e0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
