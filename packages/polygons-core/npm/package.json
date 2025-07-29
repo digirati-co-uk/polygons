@@ -1,17 +1,29 @@
 {
   "name": "polygon-editor",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "author": "Stephen Fraser <stephen.fraser@digirati.com>",
   "description": "A library for editing polygons, polylines and points",
   "type": "module",
   "module": "./index.js",
   "main": "./index.cjs",
   "files": [
-    "index.d.mts",
+    "index.d.cts",
     "index.d.ts",
     "index.js",
     "index.cjs"
   ],
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./index.cjs"
+      },
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      }
+    }
+  },
   "scripts": {
     "prepack": "tsup"
   },

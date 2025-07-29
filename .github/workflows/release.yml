@@ -73,6 +73,8 @@ jobs:
             ${{ runner.os }}-18-pnpm-store-
 
       - run: pnpm i --frozen-lockfile
+      - run: pnpm run prepack
+        working-directory: packages/polygons-core/npm
 
       - uses: JS-DevTools/npm-publish@v3
         with:
