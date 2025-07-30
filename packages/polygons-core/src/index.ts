@@ -49,6 +49,10 @@ const requestAnimationFrame =
 const cancelAnimationFrame =
   typeof window !== 'undefined' ? window.cancelAnimationFrame : (id: any) => clearTimeout(id);
 
+function isCreationTool(tool: ValidTools): boolean {
+  return !['hand', 'pointer'].includes(tool);
+}
+
 interface CreateHelperInput {
   id?: string;
   open: boolean;
@@ -198,6 +202,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     },
     // Set the current tool
     currentTool: initialTool,
+    lastCreationTool: isCreationTool(initialTool) ? initialTool : null,
     // Snapping configuration
     snapEnabled: false,
     snapToPoints: true,
@@ -767,19 +772,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       if (resp.isOpen === true || resp.isOpen === false) {
         state.isOpen = resp.isOpen;
         internals.shouldUpdate = true;
-
-        // Auto-switch tools based on shape completion
-        if (resp.isOpen === false && state.slowState.currentTool === 'pen') {
-          // Shape was just closed with pen tool, switch to pointer for manipulation
-          setTimeout(() => {
-            setTool('pointer');
-          }, 50);
-        } else if (resp.isOpen === true && state.slowState.currentTool === 'pointer') {
-          // Shape was opened with pointer tool, switch to pen for editing
-          setTimeout(() => {
-            setTool('pen');
-          }, 50);
-        }
       }
       pushUndo({
         isOpen: state.isOpen,
@@ -1224,6 +1216,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       return;
     }
 
+    let lastCreationTool = state.slowState.lastCreationTool;
+    if (isCreationTool(tool)) {
+      lastCreationTool = tool;
+    }
+
     // Cancel any ongoing transition when switching tools
     if (state.slowState.transitioning) {
       state.transitionPoints = null;
@@ -1345,6 +1342,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       tools: newTools,
       validIntentKeys,
       selectedPoints,
+      lastCreationTool,
       // Set appropriate mode flags based on tool
       boxMode: tool === 'box',
     });
@@ -1490,7 +1488,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       if (state.selectedPoints.length === state.polygon.points.length && !state.isOpen) {
         setTool('pointer');
       } else if (state.isOpen || state.selectedPoints.length > 0) {
-        setTool('pen');
+        setTool(state.slowState.lastCreationTool || 'pen');
       } else {
         setTool('pointer');
       }

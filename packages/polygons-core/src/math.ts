@@ -167,6 +167,70 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
 
 export function isRectangle(points: Point[]) {
   if (points.length !== 4) return false;
+
+  // For an axis-aligned rectangle, we need exactly 4 points
+  // that form right angles and have sides parallel to the axes
+
+  const tolerance = 1e-10;
+
+  // Sort points to find the bounding box
+  const xs = points.map((p) => p[0]).sort((a, b) => a - b);
+  const ys = points.map((p) => p[1]).sort((a, b) => a - b);
+
+  // For a rectangle, we should have exactly 2 unique x values and 2 unique y values
+  if (Math.abs(xs[0] - xs[1]) > tolerance || Math.abs(xs[2] - xs[3]) > tolerance) {
+    // We don't have exactly 2 unique x values
+    if (
+      !(
+        Math.abs(xs[0] - xs[1]) < tolerance &&
+        Math.abs(xs[2] - xs[3]) < tolerance &&
+        Math.abs(xs[1] - xs[2]) > tolerance
+      )
+    ) {
+      return false;
+    }
+  }
+
+  if (Math.abs(ys[0] - ys[1]) > tolerance || Math.abs(ys[2] - ys[3]) > tolerance) {
+    // We don't have exactly 2 unique y values
+    if (
+      !(
+        Math.abs(ys[0] - ys[1]) < tolerance &&
+        Math.abs(ys[2] - ys[3]) < tolerance &&
+        Math.abs(ys[1] - ys[2]) > tolerance
+      )
+    ) {
+      return false;
+    }
+  }
+
+  // Get the unique coordinates
+  const minX = xs[0];
+  const maxX = xs[3];
+  const minY = ys[0];
+  const maxY = ys[3];
+
+  // Check that we have exactly the 4 corner points of the rectangle
+  const expectedPoints = [
+    [minX, minY],
+    [minX, maxY],
+    [maxX, minY],
+    [maxX, maxY],
+  ];
+
+  // Verify each expected point exists in the input
+  for (const expectedPoint of expectedPoints) {
+    const found = points.some(
+      (point) => Math.abs(point[0] - expectedPoint[0]) < tolerance && Math.abs(point[1] - expectedPoint[1]) < tolerance,
+    );
+    if (!found) return false;
+  }
+
+  return true;
+}
+
+export function isRectangleOfAnyRotation(points: Point[]) {
+  if (points.length !== 4) return false;
   // Convert to Point type for consistency with other functions
   const pts: Point[] = points.map((p) => [p[0], p[1]]);
 

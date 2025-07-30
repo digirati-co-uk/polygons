@@ -5,12 +5,13 @@ export const selectShape: ActionIntent = {
   type: 'select-shape',
   label: 'Select shape',
   trigger: { type: 'click' },
-  tools: ['pointer'],
+  tools: ['pointer', 'pen'],
   isValid(pointers, state, modifiers) {
     return moveShape.isValid(pointers, state, modifiers);
   },
   commit(pointers, state, modifiers) {
     return {
+      tool: 'pointer',
       selectedPoints: state.polygon.points.map((_, idx) => idx),
     };
   },

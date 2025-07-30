@@ -8,5 +8,7 @@ export default defineConfig((options: Options) => ({
   minify: true,
   format: ['esm', 'cjs'],
   external: [],
+  sourcemap: true,
+  watch: options.watch ? '../src/**' : undefined,
   ...options,
 }));

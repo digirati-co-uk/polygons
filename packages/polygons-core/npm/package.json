@@ -33,6 +33,6 @@
   },
   "devDependencies": {
     "contours.ts": "^0.2.2",
-    "tsup": "^8.0.0"
+    "tsup": "^8.5.0"
   }
 }

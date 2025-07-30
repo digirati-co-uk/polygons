@@ -16,6 +16,7 @@ export const closeLineBox: ActionIntent = {
     return {
       isOpen: false,
       points: state.lineBox,
+      tool: 'pen',
     };
   },
 };

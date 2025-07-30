@@ -79,6 +79,7 @@ export interface SlowState {
   // Tools (better modes)
   tools: Record<ValidTools, boolean>;
   currentTool: ValidTools;
+  lastCreationTool: ValidTools | null;
 
   // Snapping
   snapEnabled: boolean;

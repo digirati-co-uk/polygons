@@ -1,7 +1,7 @@
-import { simplifyPolygon } from '../math';
+import { distance, simplifyPolygon } from '../math';
 import type { Point } from '../polygon';
 import { applySnapToPointer, updateSnapState } from '../snap-utils';
-import type { Modifiers, RenderState, TransitionIntent } from '../types';
+import type { Modifiers, RenderState, TransitionIntent, ValidTools } from '../types';
 
 export const drawShape: TransitionIntent = {
   type: 'draw-shape',
@@ -40,27 +40,33 @@ export const drawShape: TransitionIntent = {
     if (points.length === 0) {
       return;
     }
-
+    let isOpen = true;
+    const drawCloseDistance = 3;
     const selected = state.selectedPoints[0];
-
-    // Check if we're starting a new shape
-    if (state.polygon.points.length === 0) {
-      return {
-        isOpen: true, // Keep it open for continued drawing
-        points: points,
-        selectedPoints: [points.length - 1], // Select the last point
-      };
-    }
-
+    let pointsToSave = [...state.polygon.points, ...points];
+    let firstPoint = pointsToSave[0];
+    let lastPoint = pointsToSave[pointsToSave.length - 1];
+    // Need to flip first and last.
     if (selected === 0) {
-      return {
-        isOpen: false,
-        points: [...points, ...state.polygon.points.slice(0).reverse()],
-      };
+      firstPoint = pointsToSave[pointsToSave.length - 1];
+      lastPoint = pointsToSave[0];
+      pointsToSave = [...points, ...state.polygon.points.slice(0).reverse()];
     }
+    let selectedPointsToSave = [pointsToSave.length - 1];
+    const isCloseEnoughToClose = distance(firstPoint, lastPoint) / modifiers.proximity < drawCloseDistance;
+    let tool: ValidTools | '' = '';
+    if (isCloseEnoughToClose) {
+      isOpen = false;
+      tool = 'pointer';
+      // Select all points?
+      selectedPointsToSave = pointsToSave.map((_, index) => index);
+    }
+
     return {
-      isOpen: false,
-      points: [...state.polygon.points, ...points],
+      isOpen,
+      tool: tool || undefined,
+      points: pointsToSave,
+      selectedPoints: selectedPointsToSave,
     };
   },
 };
