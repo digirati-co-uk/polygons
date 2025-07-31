@@ -7,6 +7,7 @@ export const deselectBoundingBox: ActionIntent = {
   trigger: { type: 'click' },
   isValid(pointers, state, modifiers) {
     return (
+      state.slowState.canDeselect &&
       !state.isOpen &&
       !state.slowState.boxMode &&
       state.selectedPoints.length > 2 &&

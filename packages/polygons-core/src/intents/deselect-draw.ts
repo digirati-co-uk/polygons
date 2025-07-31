@@ -12,7 +12,7 @@ export const deselectDraw: ActionIntent = {
     // }
 
     // Always true, since it's just the "default" or fallback option when you click escape.
-    return true;
+    return state.slowState.canDeselect;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers): { selectedPoints?: number[] } | void {
     return { selectedPoints: [] };

@@ -10,6 +10,7 @@
     "contours.ts": "^0.2.2"
   },
   "devDependencies": {
+    "mitt": "^3.0.1",
     "@types/node": "22",
     "tsup": "^8.0.0",
     "vitest": "^1.0.0-beta.3"

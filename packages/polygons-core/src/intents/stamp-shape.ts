@@ -11,6 +11,9 @@ export const stampShape: TransitionIntent = {
   },
 
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+    if (state.polygon.points.length && !state.slowState.canDelete) {
+      return false;
+    }
     return true;
   },
 
@@ -68,7 +71,7 @@ export const stampShape: TransitionIntent = {
     let dx = x2 - x1 - 32;
     let dy = y2 - y1 - 32;
 
-    if (modifiers.Shift) {
+    if (modifiers.Shift || state.slowState.fixedAspectRatio) {
       // Maintain aspect ratio.
       const aspect = box.width / box.height;
       if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {

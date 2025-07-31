@@ -14,7 +14,7 @@ export const deletePoint: ActionIntent = {
     //   return false;
     // }
 
-    return state.selectedPoints.length > 0;
+    return state.selectedPoints.length > 0 && state.slowState.canDelete;
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     const points = state.polygon.points;

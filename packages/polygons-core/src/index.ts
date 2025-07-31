@@ -1,3 +1,4 @@
+import mitt, { type Emitter } from 'mitt';
 import { addOpenPoint } from './intents/add-open-point';
 import { boundingBoxCorners } from './intents/bounding-box-corners';
 import { closeLineBox } from './intents/close-line-box';
@@ -55,13 +56,28 @@ function isCreationTool(tool: ValidTools): boolean {
 
 interface CreateHelperInput {
   id?: string;
-  open: boolean;
-  points: Array<Point>;
+  open?: boolean;
+  points?: Array<Point>;
   tool?: ValidTools;
   fixedAspectRatio?: boolean;
   keyboardShortcutMapping?: Record<string, string>;
   toolMap?: Record<string, ValidTools>;
+  keyboardShortcutsEnabled?: boolean;
+  enabledTools?: ValidTools[];
+  emitter?: Emitter<PolygonEvents>;
 }
+
+interface OnSaveOutput {
+  id?: string;
+  open: boolean;
+  points: Array<Point>;
+}
+
+export type PolygonEvents = {
+  'polygons.start-transition': { transitionIntent: string; };
+  'polygons.end-transition': { transitionIntent: string; response: ReturnType<TransitionIntent['commit']>; };
+  'polygons.transition': { transitionIntent: string };
+};
 
 /**
  * Transition intents
@@ -146,10 +162,15 @@ keyIntents.forEach((i) => {
 
 const BASE_PROXIMITY = 10;
 
-export function createHelper(input: CreateHelperInput | null, onSave: (input: CreateHelperInput) => void) {
+export function createHelper(input: CreateHelperInput | null, onSave: (input: OnSaveOutput) => void) {
   const fixedAspectRatio = input?.fixedAspectRatio || false;
   const initialTool = input?.tool || 'pointer';
   const keyboardShortcutMapping = input?.keyboardShortcutMapping || {};
+  const keyboardShortcutsEnabled =
+    typeof input?.keyboardShortcutsEnabled === 'boolean' ? input.keyboardShortcutsEnabled : true;
+  const enabledTools = input?.enabledTools || ['pointer', 'pen', 'box', 'lineBox', 'stamp', 'hand', 'line', 'pencil'];
+  const emitter = input?.emitter || mitt<PolygonEvents>();
+
   // Map keys to tools
   const toolMap: Record<string, ValidTools> = {
     V: 'pointer',
@@ -188,18 +209,12 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     boxMode: false,
     bezierLines: [],
     fixedAspectRatio,
+    isToolSwitchingLocked: false,
+    canDeselect: false,
+    canDelete: true,
     cursor: 'default',
     // Initialize tools with defaults based on initialTool
-    tools: {
-      hand: false,
-      pointer: false,
-      lineBox: false,
-      stamp: false,
-      box: false,
-      pen: false,
-      pencil: false,
-      line: false,
-    },
+    enabledTools,
     // Set the current tool
     currentTool: initialTool,
     lastCreationTool: isCreationTool(initialTool) ? initialTool : null,
@@ -214,7 +229,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   // This is state that will change frequently, and used in the clock-managed render function.
   const state: RenderState = {
-    isOpen: input ? input.open : false,
+    isOpen: typeof input?.open === 'boolean' ? input.open : false,
     polygon: {
       points: input?.points || [],
       iedges: null,
@@ -239,7 +254,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     selectionBox: null,
     slowState,
     transitionDraw: [],
-    panOffset: { x: 0, y: 0 },
     isPanning: false,
     panStart: null,
     snapTargets: [],
@@ -610,8 +624,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     }
     if (!didSetTransition) {
       if (internals.transitionIntent) {
-        internals.transitionIntent = null;
         setState({ transitionIntentType: null });
+        internals.transitionIntent = null;
       }
     }
 
@@ -752,6 +766,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   function commit(intent: ActionIntent | TransitionIntent) {
     const resp = intent.commit([pointerState.lastPress!], state, getModifiers());
+    emitter.emit('polygons.end-transition', { transitionIntent: intent.type, response: resp });
     if (resp) {
       if (resp.tool) {
         setTool(resp.tool);
@@ -935,6 +950,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
       // Tool shortcuts
       if (!state.slowState.modifiers.Meta && !state.slowState.modifiers.Alt && !state.slowState.transitioning) {
+        if (!keyboardShortcutsEnabled) return;
         const toolKey = key.toUpperCase();
 
         if (toolMap[toolKey]) {
@@ -1035,6 +1051,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       // We are transitioning, we should update the transition.
       if (internals.transitionIntent) {
         internals.transitionIntent.transition(pointers, state, getModifiers());
+        emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
       }
     } else if (pointerState.isPressed && !pointerState.noTransition) {
       // We are not transitioning, but should we start?
@@ -1069,7 +1086,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
             }
           }
           setState({ transitionModifiers: internals.transitionIntent.modifiers || null });
+          emitter.emit('polygons.start-transition', { transitionIntent: internals.transitionIntent.type });
           internals.transitionIntent.transition([pointerState.lastPress!], state, getModifiers());
+          emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
         } else {
           pointerState.noTransition = true;
         }
@@ -1211,13 +1230,24 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
   // Tools
   // Tool management functions
   function setTool(tool: ValidTools) {
+    if (state.slowState.isToolSwitchingLocked) {
+      return;
+    }
     // Skip if already on this tool
     if (state.slowState.currentTool === tool) {
       return;
     }
 
+    // Skip if tool is not enabled.
+    if (!state.slowState.enabledTools.includes(tool)) {
+      return;
+    }
+
     let lastCreationTool = state.slowState.lastCreationTool;
     if (isCreationTool(tool)) {
+      if (state.slowState.isToolSwitchingLocked) {
+        return;
+      }
       lastCreationTool = tool;
     }
 
@@ -1230,21 +1260,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
       state.lineBox = null;
       setState({ transitioning: false });
     }
-
-    // Reset all tool states
-    const newTools = {
-      hand: false,
-      pointer: false,
-      lineBox: false,
-      stamp: false,
-      box: false,
-      pen: false,
-      pencil: false,
-      line: false,
-    };
-
-    // Set the requested tool to true
-    newTools[tool] = true;
 
     // Get valid intents for this tool (for UI hints)
     const validIntentKeys = getValidIntentsForTool(tool);
@@ -1302,7 +1317,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
       case 'box':
         // Box tool: clear selection, use stamps
-        selectedPoints = [];
+        selectedPoints = state.polygon.points.map((_, idx) => idx);
         isOpen = false;
         stamps.square();
         break;
@@ -1339,7 +1354,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     // Update related mode flags based on the tool
     setState({
       currentTool: tool,
-      tools: newTools,
       validIntentKeys,
       selectedPoints,
       lastCreationTool,
@@ -1382,11 +1396,6 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     if (state.slowState.currentTool === tool) {
       // If unsetting the current tool, default to pointer
       setTool('pointer');
-    } else {
-      // Just unset this specific tool
-      setState({
-        tools: { ...state.slowState.tools, [tool]: false },
-      });
     }
   }
 
@@ -1417,26 +1426,28 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
     unsetTool,
     toggleTool,
     updateVisibility: updateToolVisibility,
-    get current() {
-      return state.slowState.currentTool;
+
+    setCanDelete(canDelete: boolean) {
+      setState({ canDelete });
     },
-    get active() {
-      return state.slowState.tools;
+
+    setCanDeselect(canDeselect: boolean) {
+      setState({ canDeselect });
     },
-    get cursor() {
-      return state.slowState.cursor;
+
+    lockToolSwitching() {
+      setState({ isToolSwitchingLocked: true });
     },
+    unlockToolSwitching() {
+      setState({ isToolSwitchingLocked: false });
+    },
+    toggleToolSwitching() {
+      setState({ isToolSwitchingLocked: !state.slowState.isToolSwitchingLocked });
+    },
+
     // Tool keyboard shortcut info
     shortcuts: Object.fromEntries(Object.entries(toolMap).map(([key, value]) => [value, key])),
-    // Get the current pan offset
-    get panOffset() {
-      return state.panOffset;
-    },
-    // Reset the pan offset to center the view
-    resetPan() {
-      state.panOffset = { x: 0, y: 0 };
-      internals.shouldUpdate = true;
-    },
+
     // List all valid intents for current tool
     getValidIntents(tool?: ValidTools) {
       const targetTool = tool || state.slowState.currentTool;
@@ -1549,6 +1560,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: Cr
 
   return {
     state,
+    emitter,
     modifiers,
     stamps,
     history,

@@ -43,7 +43,6 @@ export interface RenderState {
   transitionBezierLine: null | [Point, Point];
   slowState: SlowState;
   transitionDraw: Point[];
-  panOffset: { x: number; y: number };
   isPanning: boolean;
   panStart: Point | null;
   snapTargets: SnapTarget[];
@@ -75,9 +74,12 @@ export interface SlowState {
   // Modes.
   boxMode: boolean;
   fixedAspectRatio: boolean;
+  isToolSwitchingLocked: boolean;
+  canDeselect: boolean;
+  canDelete: boolean;
 
   // Tools (better modes)
-  tools: Record<ValidTools, boolean>;
+  enabledTools: ValidTools[];
   currentTool: ValidTools;
   lastCreationTool: ValidTools | null;
 

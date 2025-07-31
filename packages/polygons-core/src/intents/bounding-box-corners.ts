@@ -19,7 +19,6 @@ export const boundingBoxCorners: TransitionIntent = {
     // No bounding box.
     if (state.selectedPoints.length !== state.polygon.points.length) return false;
     if (!state.polygon.boundingBox) return false;
-
     // Config
     const margin = modifiers.proximity * 0.5;
 
@@ -208,6 +207,7 @@ export const boundingBoxCorners: TransitionIntent = {
 
     if (modifiers.Shift || state.slowState.fixedAspectRatio) {
       // Maintain aspect ratio.
+      //
       const aspect = box.width / box.height;
       if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {
         dy = dx / aspect;
