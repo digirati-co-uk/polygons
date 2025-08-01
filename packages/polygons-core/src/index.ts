@@ -74,8 +74,8 @@ interface OnSaveOutput {
 }
 
 export type PolygonEvents = {
-  'polygons.start-transition': { transitionIntent: string; };
-  'polygons.end-transition': { transitionIntent: string; response: ReturnType<TransitionIntent['commit']>; };
+  'polygons.start-transition': { transitionIntent: string };
+  'polygons.end-transition': { transitionIntent: string; response: ReturnType<TransitionIntent['commit']> };
   'polygons.transition': { transitionIntent: string };
 };
 
@@ -318,6 +318,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
           return;
         }
       }
+    }
+
+    if (newState.selectedPoints) {
+      state.selectedPoints = newState.selectedPoints;
     }
 
     if (keys.length === 1 && keys.includes('hasClosestLine')) {
@@ -1581,6 +1585,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   };
 }
 
+export * from './math';
 export * from './snap-utils';
 export * from './svg-helpers';
 export * from './types';
