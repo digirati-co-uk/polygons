@@ -1559,11 +1559,16 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     getTargets: () => state.snapTargets,
   };
 
+  function selectAllPoints() {
+    setState({ selectedPoints: state.polygon.points.map((_, idx) => idx) });
+  }
+
   // Initialize tool system
   setTool(initialTool);
 
   return {
     state,
+    setState,
     emitter,
     modifiers,
     stamps,
@@ -1579,6 +1584,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     label,
     tools,
     snap,
+    selectAllPoints,
 
     lockAspectRatio,
     unlockAspectRatio,
