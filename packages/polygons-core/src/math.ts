@@ -62,9 +62,10 @@ function d(u: Point, v: Point) {
 export function clampXYToBounds(
   dx: number,
   dy: number,
+  box?: null | { x: number; y: number; width: number; height: number },
   bounds?: null | { x: number; y: number; width: number; height: number },
 ) {
-  if (bounds) {
+  if (bounds && box) {
     // bounds: { x, y, width, height }
     if (dx < 0) {
       dx = Math.max(dx, -bounds.x);

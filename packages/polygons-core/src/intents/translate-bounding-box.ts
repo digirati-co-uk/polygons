@@ -39,6 +39,7 @@ export const translateBoundingBox: TransitionIntent = {
       //
       pointer[0] - startingPoint[0],
       pointer[1] - startingPoint[1],
+      box,
       bounds,
     );
 

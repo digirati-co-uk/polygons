@@ -26,6 +26,7 @@ export const movePoint: TransitionIntent = {
       //
       pointers[0][0],
       pointers[0][1],
+      state.polygon.boundingBox,
       state.slowState.bounds,
     );
 
