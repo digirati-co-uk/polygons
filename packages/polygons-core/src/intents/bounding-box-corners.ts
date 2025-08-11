@@ -122,23 +122,22 @@ export const boundingBoxCorners: TransitionIntent = {
     // }
   },
   transition(pointers, state, modifiers) {
-    // Start with transform, scaling points from the origin.
     const box = state.polygon.boundingBox!;
-    let origin: Point = [box.x, box.y];
     const start = state.transitionOrigin || pointers[0];
-    const [x, y] = pointers[0];
+    const [mx, my] = pointers[0];
 
+    // -------------------------
+    // ROTATION
+    // -------------------------
     if ((modifiers.Meta || state.transitionRotate) && !state.slowState.boxMode) {
-      origin = [box.x + box.width / 2, box.y + box.height / 2];
-      // Rotation.
+      const origin: Point = [box.x + box.width / 2, box.y + box.height / 2];
+
       const startAngle = Math.atan2(start[1] - origin[1], start[0] - origin[0]);
-      const angle = Math.atan2(y - origin[1], x - origin[0]);
+      const angle = Math.atan2(my - origin[1], mx - origin[0]);
       const shouldSnapToSteps = modifiers.Shift;
       const snapAngle = Math.PI / (modifiers.Alt ? 4 : 12);
       let angleDiff = angle - startAngle;
-      if (shouldSnapToSteps) {
-        angleDiff = Math.round(angleDiff / snapAngle) * snapAngle;
-      }
+      if (shouldSnapToSteps) angleDiff = Math.round(angleDiff / snapAngle) * snapAngle;
 
       const cos = Math.cos(angleDiff);
       const sin = Math.sin(angleDiff);
@@ -151,13 +150,7 @@ export const boundingBoxCorners: TransitionIntent = {
         const y2 = x1 * sin + y1 * cos;
         const x3 = x2 + origin[0];
         const y3 = y2 + origin[1];
-
-        if (point.length === 6) {
-          newPoints.push([x3, y3, point[2], point[3], point[4], point[5]]);
-          continue;
-        }
-
-        newPoints.push([x3, y3]);
+        newPoints.push(point.length === 6 ? [x3, y3, point[2], point[3], point[4], point[5]] : [x3, y3]);
       }
 
       state.transitionPoints = newPoints;
@@ -169,82 +162,108 @@ export const boundingBoxCorners: TransitionIntent = {
       return;
     }
 
-    let dx = 0;
-    let dy = 0;
+    // -------------------------
+    // RESIZE
+    // -------------------------
 
-    switch (state.transitionDirection) {
-      case 'se': {
-        origin = [box.x, box.y];
-        dx = x - start[0];
-        dy = y - start[1];
-        break;
-      }
-      case 'sw': {
-        origin = [box.x + box.width, box.y];
-        dx = start[0] - x;
-        dy = y - start[1];
-        break;
-      }
-      case 'ne': {
-        origin = [box.x, box.y + box.height];
-        dx = x - start[0];
-        dy = start[1] - y;
-        break;
-      }
-      case 'nw': {
-        origin = [box.x + box.width, box.y + box.height];
-        dx = start[0] - x;
-        dy = start[1] - y;
-        break;
-      }
-    }
+    // Which corner is being dragged (signs of the corner vector).
+    // se → (+1,+1), sw → (-1,+1), ne → (+1,-1), nw → (-1,-1)
+    const dir = state.transitionDirection as 'se' | 'sw' | 'ne' | 'nw';
+    const sx = dir.includes('e') ? 1 : -1;
+    const sy = dir.includes('s') ? 1 : -1;
 
-    if (modifiers.Alt) {
+    // Anchor (origin) is the opposite corner, unless Alt = scale from center.
+    const fromCenter = !!modifiers.Alt;
+    let origin: Point;
+    if (fromCenter) {
       origin = [box.x + box.width / 2, box.y + box.height / 2];
-      dx *= 2;
-      dy *= 2;
+    } else {
+      switch (dir) {
+        case 'se':
+          origin = [box.x, box.y];
+          break; // top-left
+        case 'sw':
+          origin = [box.x + box.width, box.y];
+          break; // top-right
+        case 'ne':
+          origin = [box.x, box.y + box.height];
+          break; // bottom-left
+        case 'nw':
+          origin = [box.x + box.width, box.y + box.height];
+          break; // bottom-right
+      }
     }
+
+    const ow = fromCenter ? box.width / 2 : box.width; // “corner vector” magnitudes
+    const oh = fromCenter ? box.height / 2 : box.height;
+
+    // If aspect must be fixed, project the mouse onto the corner-diagonal.
+    // v = (sx*ow, sy*oh).  t = ((P-O)·v) / (v·v).  New scale = t.
+    let scaleX: number, scaleY: number;
 
     if (modifiers.Shift || state.slowState.fixedAspectRatio) {
-      // Maintain aspect ratio.
-      //
-      const aspect = box.width / box.height;
-      if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {
-        dy = dx / aspect;
-      } else {
-        dx = dy * aspect;
+      const vx = sx * ow;
+      const vy = sy * oh;
+      const px = mx - origin[0];
+      const py = my - origin[1];
+
+      const denom = vx * vx + vy * vy;
+      let t = denom > 0 ? (px * vx + py * vy) / denom : 1;
+
+      // Clamp to avoid flips / zero size (adjust to your own rules/mins).
+      const MIN_T = 0.01;
+      t = Math.max(t, MIN_T);
+
+      scaleX = t;
+      scaleY = t;
+    } else {
+      // Free scaling (your previous dx/dy path), using the drag delta.
+      let dx = 0,
+        dy = 0;
+      switch (dir) {
+        case 'se':
+          dx = mx - start[0];
+          dy = my - start[1];
+          break;
+        case 'sw':
+          dx = start[0] - mx;
+          dy = my - start[1];
+          break;
+        case 'ne':
+          dx = mx - start[0];
+          dy = start[1] - my;
+          break;
+        case 'nw':
+          dx = start[0] - mx;
+          dy = start[1] - my;
+          break;
       }
+
+      if (fromCenter) {
+        dx *= 2;
+        dy *= 2;
+      }
+
+      scaleX = (box.width + dx) / box.width;
+      scaleY = (box.height + dy) / box.height;
     }
 
-    const scaleX = (box.width + dx) / box.width;
-    const scaleY = (box.height + dy) / box.height;
-
+    // Apply scale about the chosen origin
     const newPoints: Point[] = [];
     for (const point of state.polygon.points) {
-      // minus origin
       const x1 = point[0] - origin[0];
       const y1 = point[1] - origin[1];
-      // scale
       const x2 = x1 * scaleX;
       const y2 = y1 * scaleY;
-      // add origin
       const x3 = x2 + origin[0];
       const y3 = y2 + origin[1];
-
-      if (point.length === 6) {
-        newPoints.push([x3, y3, point[2], point[3], point[4], point[5]]);
-        continue;
-      }
-
-      newPoints.push([x3, y3]);
+      newPoints.push(point.length === 6 ? [x3, y3, point[2], point[3], point[4], point[5]] : [x3, y3]);
     }
+
     state.transitionPoints = newPoints;
     const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null, bezierLines: [], isBezier: false };
     updateBoundingBox(poly);
     state.transitionBoundingBox = poly.boundingBox;
-
-    // @todo
-    // console.log(state.transitionDirection);
   },
   commit(pointers, state, modifiers) {
     const points = state.transitionPoints!;
