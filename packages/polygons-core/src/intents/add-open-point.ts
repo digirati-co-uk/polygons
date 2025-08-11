@@ -27,6 +27,15 @@ export const addOpenPoint: ActionIntent = {
       return false;
     }
 
+    if (state.slowState.bounds) {
+      // Check if outside of bounds ({x, y, width, height })
+      const { x, y, width, height } = state.slowState.bounds;
+      const [px, py] = pointers[0]!;
+      if (px < x || px > x + width || py < y || py > y + height) {
+        return false;
+      }
+    }
+
     const selected = state.selectedPoints[0];
     return selected === 0 || selected === state.polygon.points.length - 1;
   },

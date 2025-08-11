@@ -59,6 +59,27 @@ function d(u: Point, v: Point) {
   return norm(diff(u, v));
 }
 
+export function clampXYToBounds(
+  dx: number,
+  dy: number,
+  bounds?: null | { x: number; y: number; width: number; height: number },
+) {
+  if (bounds) {
+    // bounds: { x, y, width, height }
+    if (dx < 0) {
+      dx = Math.max(dx, -bounds.x);
+    } else if (dx > 0) {
+      dx = Math.min(dx, bounds.x + bounds.width - box.x - box.width);
+    }
+    if (dy < 0) {
+      dy = Math.max(dy, -bounds.y);
+    } else if (dy > 0) {
+      dy = Math.min(dy, bounds.y + bounds.height - box.y - box.height);
+    }
+  }
+  return [dx, dy];
+}
+
 // Source: https://gist.github.com/adammiller/826148?permalink_comment_id=317898#gistcomment-317898
 export function simplifyPolygon(V: Point[], tol: number): Point[] {
   // V ... [[x1,y1],[x2,y2],...] polyline

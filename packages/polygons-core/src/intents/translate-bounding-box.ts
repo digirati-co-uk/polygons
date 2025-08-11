@@ -1,3 +1,4 @@
+import { clampXYToBounds } from '../math';
 import { type Point, precalculate, updateBoundingBox } from '../polygon';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
@@ -28,13 +29,18 @@ export const translateBoundingBox: TransitionIntent = {
   },
 
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+    const bounds = state.slowState.bounds;
     // Each time, we need to translate by the same amount.
     const startingPoint = state.transitionOrigin!;
     const box = state.polygon.boundingBox!;
     const pointer = pointers[0];
 
-    const dx = pointer[0] - startingPoint[0];
-    const dy = pointer[1] - startingPoint[1];
+    const [dx, dy] = clampXYToBounds(
+      //
+      pointer[0] - startingPoint[0],
+      pointer[1] - startingPoint[1],
+      bounds,
+    );
 
     state.transitionPoints = state.polygon.points.map((point) => {
       if (point.length === 6) {

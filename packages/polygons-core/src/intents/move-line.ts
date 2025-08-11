@@ -1,3 +1,4 @@
+import { clampXYToBounds } from '../math';
 import type { TransitionIntent } from '../types';
 
 export const moveLine: TransitionIntent = {
@@ -23,8 +24,12 @@ export const moveLine: TransitionIntent = {
     const box = state.polygon.boundingBox!;
     const pointer = pointers[0];
 
-    const dx = pointer[0] - startingPoint[0];
-    const dy = pointer[1] - startingPoint[1];
+    const [dx, dy] = clampXYToBounds(
+      //
+      pointer[0] - startingPoint[0],
+      pointer[1] - startingPoint[1],
+      state.slowState.bounds,
+    );
 
     state.transitionPoints = state.polygon.points.map((point) => {
       if (point.length === 6) {

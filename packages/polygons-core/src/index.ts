@@ -65,6 +65,7 @@ interface CreateHelperInput {
   keyboardShortcutsEnabled?: boolean;
   enabledTools?: ValidTools[];
   emitter?: Emitter<PolygonEvents>;
+  bounds?: { x: number; y: number; width: number; height: number };
 }
 
 interface OnSaveOutput {
@@ -199,6 +200,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       Meta: false,
       proximity: BASE_PROXIMITY, // default value.
     },
+    bounds: input?.bounds || null,
     showBoundingBox: false,
     currentModifiers: {},
     validIntentKeys: {},
@@ -1563,6 +1565,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     setState({ selectedPoints: state.polygon.points.map((_, idx) => idx) });
   }
 
+  function setBounds(bounds: null | { x: number; y: number; width: number; height: number }) {
+    setState({ bounds });
+  }
+
   // Initialize tool system
   setTool(initialTool);
 
@@ -1585,7 +1591,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     tools,
     snap,
     selectAllPoints,
-
+    setBounds,
     lockAspectRatio,
     unlockAspectRatio,
   };

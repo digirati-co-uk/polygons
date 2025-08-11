@@ -70,6 +70,7 @@ export interface SlowState {
   selectedStamp: null | InputShape;
   bezierLines: [number, Point, Point][];
   cursor: string;
+  bounds: null | { x: number; y: number; width: number; height: number };
 
   // Modes.
   boxMode: boolean;
