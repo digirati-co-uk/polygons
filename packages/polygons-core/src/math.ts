@@ -68,12 +68,12 @@ export function clampXYToBounds(
   if (bounds && box) {
     // bounds: { x, y, width, height }
     if (dx < 0) {
-      dx = Math.max(dx, -bounds.x);
+      dx = Math.max(dx, -bounds.x - box.x);
     } else if (dx > 0) {
       dx = Math.min(dx, bounds.x + bounds.width - box.x - box.width);
     }
     if (dy < 0) {
-      dy = Math.max(dy, -bounds.y);
+      dy = Math.max(dy, -bounds.y - box.y);
     } else if (dy > 0) {
       dy = Math.min(dy, bounds.y + bounds.height - box.y - box.height);
     }
