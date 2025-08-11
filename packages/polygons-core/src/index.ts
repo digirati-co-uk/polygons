@@ -1059,7 +1059,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
         internals.transitionIntent.transition(pointers, state, getModifiers());
         emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
       }
-    } else if (pointerState.isPressed && !pointerState.noTransition) {
+    } else if (pointerState.isPressed && !pointerState.noTransition && pointerState.lastPress && state.pointer) {
       // We are not transitioning, but should we start?
       const shouldStart = !pointerState.isClicking || distance(pointerState.lastPress!, state.pointer) > 10;
       if (shouldStart) {
