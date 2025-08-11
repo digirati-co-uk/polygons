@@ -1,4 +1,3 @@
-import { clampXYToBounds } from '../math';
 import { closestVertex, type Point } from '../polygon';
 import { applySnapToPointer, updateSnapState } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
@@ -22,14 +21,7 @@ export const movePoint: TransitionIntent = {
 
     const threshold = modifiers.proximity;
 
-    const [x, y] = clampXYToBounds(
-      //
-      pointers[0][0],
-      pointers[0][1],
-      state.polygon.boundingBox,
-      state.slowState.bounds,
-    );
-
+    const [x, y] = pointers[0];
     const points = state.polygon.points;
     const selected = state.selectedPoints;
     // if (selected.length > 1) {
