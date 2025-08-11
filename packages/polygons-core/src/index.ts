@@ -1438,6 +1438,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     },
 
     setCanDeselect(canDeselect: boolean) {
+      selectAllPoints();
       setState({ canDeselect });
     },
 

@@ -17,7 +17,7 @@ export const boundingBoxCorners: TransitionIntent = {
     // Currently not supported.
     if (state.isOpen) return false;
     // No bounding box.
-    if (state.selectedPoints.length !== state.polygon.points.length) return false;
+    if (!state.slowState.boxMode && state.selectedPoints.length !== state.polygon.points.length) return false;
     if (!state.polygon.boundingBox) return false;
     // Config
     const margin = modifiers.proximity * 0.5;
