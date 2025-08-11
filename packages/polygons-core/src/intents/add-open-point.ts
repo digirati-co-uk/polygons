@@ -65,9 +65,26 @@ export const addOpenPoint: ActionIntent = {
     const lineMode = state.slowState.currentTool === 'line' || state.slowState.currentTool === 'lineBox';
 
     if (selected === 0) {
+      // Check previous point.
+      if (~~currentPoints[0][0] === ~~pointer[0] && ~~currentPoints[0][1] === ~~pointer[1]) {
+        return {
+          selectedPoints: [0],
+          points: currentPoints,
+        };
+      }
+
       return {
         selectedPoints: lineMode ? [] : [0],
         points: [pointer, ...currentPoints],
+      };
+    }
+
+    // Check next point.
+    const lastPoint = currentPoints[currentPoints.length - 1];
+    if (~~lastPoint[0] === ~~pointer[0] && ~~lastPoint[1] === ~~pointer[1]) {
+      return {
+        selectedPoints: [currentPoints.length - 1],
+        points: currentPoints,
       };
     }
 
