@@ -323,8 +323,25 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       }
     }
 
+    // Optimise selectedPoints
     if (newState.selectedPoints) {
-      state.selectedPoints = newState.selectedPoints;
+      // Check if they contain the same elements.
+      const pointsA = Array.from(readOnlySlowState.selectedPoints || []);
+      const pointsB = Array.from(newState.selectedPoints || []);
+      if (pointsA.length === pointsB.length) {
+        for (const point of pointsA) {
+          if (!pointsB.includes(point)) {
+            change = true;
+            break;
+          }
+        }
+      } else {
+        change = true;
+      }
+
+      if (!change) {
+        delete newState.selectedPoints;
+      }
     }
 
     if (keys.length === 1 && keys.includes('hasClosestLine')) {
@@ -600,13 +617,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     // Get the current active tool
     const currentTool = state.slowState.currentTool;
 
-    // Update valid intent keys to help UI display available actions
-    const validIntentKeys = getValidIntentsForTool(currentTool, state.pointer);
-
     // Update UI visibility based on current tool
     updateToolVisibility(currentTool);
-
-    setState({ validIntentKeys });
 
     // Do some calculations for the intents to use, and also to update the pending UI.
     let didSetTransition = false;
@@ -1361,10 +1373,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
         break;
     }
 
+    setState({ validIntentKeys });
+
     // Update related mode flags based on the tool
     setState({
       currentTool: tool,
-      validIntentKeys,
       selectedPoints,
       lastCreationTool,
       // Set appropriate mode flags based on tool
