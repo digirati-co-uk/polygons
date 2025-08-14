@@ -66,6 +66,7 @@ interface CreateHelperInput {
   enabledTools?: ValidTools[];
   emitter?: Emitter<PolygonEvents>;
   bounds?: { x: number; y: number; width: number; height: number };
+  customSetState?: (state: Partial<RenderState>) => void;
 }
 
 interface OnSaveOutput {
@@ -380,6 +381,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     if (internals.nextSlowState && internals.nextSlowState !== state.slowState) {
       const keys = Object.keys(state.slowState) as Array<keyof SlowState>;
       const nextState: Record<string, any> = {};
+      const nextPartialState: Record<string, any> = {};
       let didChange = false;
       for (const key of keys) {
         const current = state.slowState[key];
@@ -387,6 +389,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
         if (current !== next) {
           didChange = true;
           nextState[key] = next;
+          nextPartialState[key] = next;
         } else {
           nextState[key] = current;
         }
@@ -395,6 +398,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
         state.slowState = nextState as SlowState;
         internals.nextSlowState = null;
         internals.setStateFunc(state.slowState);
+        input?.customSetState?.(nextPartialState);
       }
     }
   }
