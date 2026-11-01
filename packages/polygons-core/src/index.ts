@@ -348,6 +348,14 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     for (const key of Object.keys(newState) as Array<keyof SlowState>) {
       const next = newState[key];
       const current = state.slowState[key];
+      if (key === 'validIntentKeys' && next && current) {
+        const nextKeys = Object.keys(next);
+        const currentKeys = Object.keys(current);
+        if (
+          nextKeys.length === currentKeys.length &&
+          nextKeys.every((k) => (next as Record<string, string>)[k] === (current as Record<string, string>)[k])
+        ) continue;
+      }
       if (
         Array.isArray(next) &&
         Array.isArray(current) &&

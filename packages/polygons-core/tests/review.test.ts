@@ -3,6 +3,19 @@ import { createHelper, type Point } from '../src';
 
 const triangle: Point[] = [[100, 100], [300, 100], [200, 300]];
 
+test('idle clock frames do not notify slow-state subscribers repeatedly', () => {
+  const onStateChange = vi.fn();
+  const h = createHelper({ open: false, points: triangle, onStateChange }, () => {});
+  h.pointer([[200, 180]]);
+  h.clock.flush();
+  onStateChange.mockClear();
+  const slow = h.state.slowState;
+  h.clock.flush();
+  h.clock.flush();
+  expect(onStateChange).not.toHaveBeenCalled();
+  expect(h.state.slowState).toBe(slow);
+});
+
 describe('interrupting draft edits', () => {
   test('legacy Escape handling cancels a gesture even when deselection is locked', () => {
     const h = createHelper({ tool: 'box', points: [] }, () => {});
