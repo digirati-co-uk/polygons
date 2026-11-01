@@ -1,6 +1,6 @@
 import { distance, simplifyPolygon } from '../math';
 import type { Point } from '../polygon';
-import { applySnapToPointer, updateSnapState } from '../snap-utils';
+import { applySnapToPointer, resolvePoint, updateSnapState } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent, ValidTools } from '../types';
 
 export const drawShape: TransitionIntent = {
@@ -20,7 +20,8 @@ export const drawShape: TransitionIntent = {
   },
 
   start(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    state.transitionDraw = [];
+    const endpoint = state.polygon.points[state.selectedPoints[0]];
+    state.transitionDraw = [endpoint || resolvePoint(pointers[0], state, { disableSnap: modifiers.Shift })];
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     let currentPointer = pointers[0];
@@ -43,17 +44,17 @@ export const drawShape: TransitionIntent = {
     let isOpen = true;
     const drawCloseDistance = 3;
     const selected = state.selectedPoints[0];
-    let pointsToSave = [...state.polygon.points, ...points];
-    let firstPoint = pointsToSave[0];
-    let lastPoint = pointsToSave[pointsToSave.length - 1];
-    // Need to flip first and last.
-    if (selected === 0) {
-      firstPoint = pointsToSave[pointsToSave.length - 1];
-      lastPoint = pointsToSave[0];
-      pointsToSave = [...points, ...state.polygon.points.slice(0).reverse()];
-    }
-    let selectedPointsToSave = [pointsToSave.length - 1];
-    const isCloseEnoughToClose = distance(firstPoint, lastPoint) / modifiers.proximity < drawCloseDistance;
+    const existing = state.polygon.points;
+    const extension = existing.length ? points.slice(1) : points;
+    // Reverse only the newly drawn stroke when prepending. Reversing existing
+    // vertices would reconnect segments and detach their outgoing curve controls.
+    const prepend = existing.length > 0 && selected === 0;
+    const pointsToSave = prepend ? [...extension.reverse(), ...existing] : [...existing, ...extension];
+    const firstPoint = pointsToSave[0];
+    const lastPoint = pointsToSave[pointsToSave.length - 1];
+    let selectedPointsToSave = [prepend ? 0 : pointsToSave.length - 1];
+    const distinct = new Set(pointsToSave.map((p) => `${p[0]},${p[1]}`)).size;
+    const isCloseEnoughToClose = distinct >= 3 && distance(firstPoint, lastPoint) / modifiers.proximity < drawCloseDistance;
     let tool: ValidTools | '' = '';
     if (isCloseEnoughToClose) {
       isOpen = false;
