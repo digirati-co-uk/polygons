@@ -63,17 +63,17 @@ export function clampXYToBounds(
   dx: number,
   dy: number,
   box?: null | { x: number; y: number; width: number; height: number },
-  bounds?: null | { x: number; y: number; width: number; height: number },
+  bounds?: null | { x: number; y: number; width: number; height: number }
 ) {
   if (bounds && box) {
     // bounds: { x, y, width, height }
     if (dx < 0) {
-      dx = Math.max(dx, -bounds.x - box.x);
+      dx = Math.max(dx, bounds.x - box.x);
     } else if (dx > 0) {
       dx = Math.min(dx, bounds.x + bounds.width - box.x - box.width);
     }
     if (dy < 0) {
-      dy = Math.max(dy, -bounds.y - box.y);
+      dy = Math.max(dy, bounds.y - box.y);
     } else if (dy > 0) {
       dy = Math.min(dy, bounds.y + bounds.height - box.y - box.height);
     }
@@ -155,6 +155,7 @@ export function simplifyPolygon(V: Point[], tol: number): Point[] {
   };
 
   const n = V.length;
+  if (n < 2) return V.slice();
   const sV: any[] = [];
   let i, k, m, pv; // misc counters
   const tol2 = tol * tol; // tolerance squared
@@ -219,7 +220,7 @@ export function isRectangle(points: Point[]) {
 
   for (const corner of corners) {
     const found = points.some(
-      (point) => Math.abs(point[0] - corner[0]) < tolerance && Math.abs(point[1] - corner[1]) < tolerance,
+      (point) => Math.abs(point[0] - corner[0]) < tolerance && Math.abs(point[1] - corner[1]) < tolerance
     );
     if (!found) return false;
   }

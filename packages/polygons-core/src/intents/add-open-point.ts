@@ -41,8 +41,9 @@ export const addOpenPoint: ActionIntent = {
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     let pointer = state.line ? state.line[1] : pointers[0]!;
-    if (!modifiers.Shift && state.slowState.snapEnabled) {
-      updateSnapState(pointer, state, 3);
+    // Shift snaps to curves only; a Shift-constrained line end is left on its angle.
+    if (modifiers.Shift ? !state.line : state.slowState.snapEnabled) {
+      updateSnapState(pointer, state, 3, undefined, modifiers.Shift);
       pointer = applySnapToPointer(pointer, state);
     }
 

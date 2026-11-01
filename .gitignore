@@ -37,3 +37,10 @@ yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# Example and Storybook output
+dist/
+storybook-static/
+playwright-report/
+test-results/
+packages/polygons-core/npm/index.*

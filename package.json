@@ -4,7 +4,13 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "pnpm --filter polygons-core test && pnpm --filter web test",
+    "storybook": "pnpm --filter web storybook",
+    "build-storybook": "pnpm --filter web build-storybook",
+    "typecheck": "pnpm --filter web typecheck",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:iiif": "pnpm --filter web test:iiif"
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.5",
@@ -13,6 +19,9 @@
     "tsconfig": "workspace:*",
     "turbo": "latest"
   },
-  "packageManager": "pnpm@8.6.10",
-  "name": "polygon-helpers"
+  "packageManager": "pnpm@9.15.9",
+  "name": "polygon-helpers",
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

@@ -7,7 +7,7 @@ export const snap: TransitionIntent = {
   label: 'Smart snap',
   tools: ['pointer', 'pen', 'line'],
   modifiers: {
-    Shift: 'Disable snapping',
+    Shift: 'Snap to curves only',
   },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     // Don't snap if Shift is pressed (allows precise positioning)

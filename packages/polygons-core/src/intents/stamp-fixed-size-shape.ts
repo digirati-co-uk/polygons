@@ -7,7 +7,7 @@ export const stampFixedSizeShape: ActionIntent = {
   trigger: { type: 'click' },
   tools: ['stamp'],
   isValid(pointers, state, modifiers) {
-    return state.slowState.selectedStamp !== null;
+    return state.slowState.selectedStamp !== null && (!state.polygon.points.length || state.slowState.canDelete);
   },
   commit(pointers, state, modifiers) {
     const pointer = pointers[0];
@@ -25,7 +25,7 @@ export const stampFixedSizeShape: ActionIntent = {
     const stampWidth = Math.max(...stamp.points.map((p) => p[0])) - stampX;
     const stampHeight = Math.max(...stamp.points.map((p) => p[1])) - stampY;
 
-    const size = 4 * modifiers.proximity;
+    const size = 40 * state.scale; // Creation dimensions are independent of touch hit radius.
     let ratio = stampWidth / size;
     if (stampHeight / size > ratio) {
       ratio = stampHeight / size;

@@ -67,7 +67,9 @@ export function closestVertex(polygon: Polygon, p: Point) {
   let idx = -1;
 
   const n = polygon.points.length;
-  if (n <= 1) {
+  if (n === 1)
+    return [polygon.points[0], (polygon.points[0][0] - p[0]) ** 2 + (polygon.points[0][1] - p[1]) ** 2, 0] as const;
+  if (n === 0) {
     return [null, nearestNormsqr, idx] as const;
   }
 
@@ -90,11 +92,11 @@ export function closestVertex(polygon: Polygon, p: Point) {
 }
 
 export function updateBoundingBox(polygon: Polygon) {
-  if (polygon.points.length > 2) {
+  if (polygon.points.length > 0) {
     const x1 = Math.min(...polygon.points.map((p) => p[0]));
     const y1 = Math.min(...polygon.points.map((p) => p[1]));
-    const x2 = Math.max(0, ...polygon.points.map((p) => p[0]));
-    const y2 = Math.max(0, ...polygon.points.map((p) => p[1]));
+    const x2 = Math.max(...polygon.points.map((p) => p[0]));
+    const y2 = Math.max(...polygon.points.map((p) => p[1]));
     polygon.boundingBox = {
       x: x1,
       y: y1,
@@ -110,7 +112,8 @@ function normsqr(point: Point): number {
   return point[0] * point[0] + point[1] * point[1];
 }
 
-export function perimeterNearestTo(polygon: Polygon, p: Point) {
+const CURVE_HIT_STEPS = 32;
+export function perimeterNearestTo(polygon: Polygon, p: Point, open = false) {
   let nearestNormsqr = Infinity;
   let nearest: Point | null = null;
   let prevIdx = -1;
@@ -135,6 +138,38 @@ export function perimeterNearestTo(polygon: Polygon, p: Point) {
     const pA = pB;
     pB = polygon.points[i];
 
+    if (open && i === 0) continue;
+    if (pA.length === 6) {
+      // A curved segment: hit-test the curve itself (flattened), not its chord.
+      const c1x = pA[0] + pA[2]!,
+        c1y = pA[1] + pA[3]!,
+        c2x = pA[0] + pA[4]!,
+        c2y = pA[1] + pA[5]!;
+      let px = pA[0],
+        py = pA[1];
+      for (let k = 1; k <= CURVE_HIT_STEPS; k++) {
+        const t = k / CURVE_HIT_STEPS,
+          u = 1 - t;
+        const x = u * u * u * pA[0] + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * pB[0];
+        const y = u * u * u * pA[1] + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * pB[1];
+        const dx = x - px,
+          dy = y - py;
+        const len2 = dx * dx + dy * dy;
+        const along = len2 ? Math.max(0, Math.min(1, ((p[0] - px) * dx + (p[1] - py) * dy) / len2)) : 0;
+        const qx = px + dx * along,
+          qy = py + dy * along;
+        const d2 = (qx - p[0]) ** 2 + (qy - p[1]) ** 2;
+        if (d2 < nearestNormsqr) {
+          nearest = [qx, qy];
+          nearestNormsqr = d2;
+          nearestPoints = [pA, pB];
+          prevIdx = i === 0 ? n - 1 : i - 1;
+        }
+        px = x;
+        py = y;
+      }
+      continue;
+    }
     const t = (p[0] - pA[0]) * polygon.iedges[i][0] + (p[1] - pA[1]) * polygon.iedges[i][1];
     let q: Point;
     if (t <= 0) {
@@ -156,4 +191,26 @@ export function perimeterNearestTo(polygon: Polygon, p: Point) {
 
   // What about the two points?
   return [nearest, nearestNormsqr, nearestPoints, prevIdx] as const;
+}
+
+/**
+ * A curve's second control point is stored relative to the segment's first point but belongs visually to
+ * the segment's second point. After anchors move independently, shift it by however much the pair moved apart
+ * so the handle travels with the point it is drawn on. `oldPoints` and `newPoints` must line up by index.
+ */
+export function reattachHandles(oldPoints: Point[], newPoints: Point[], open: boolean): Point[] {
+  const n = newPoints.length;
+  if (oldPoints.length !== n) return newPoints;
+  let result: Point[] | null = null;
+  for (let a = 0; a < n; a++) {
+    const p = newPoints[a];
+    if (p.length !== 6 || (open && a === n - 1)) continue;
+    const b = (a + 1) % n;
+    const dx = newPoints[b][0] - oldPoints[b][0] - (newPoints[a][0] - oldPoints[a][0]);
+    const dy = newPoints[b][1] - oldPoints[b][1] - (newPoints[a][1] - oldPoints[a][1]);
+    if (!dx && !dy) continue;
+    result = result || newPoints.slice();
+    result[a] = [p[0], p[1], p[2]!, p[3]!, p[4]! + dx, p[5]! + dy];
+  }
+  return result || newPoints;
 }

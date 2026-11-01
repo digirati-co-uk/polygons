@@ -1,28 +1,15 @@
-## Getting Started
+# Polygon interaction lab
 
-First, run the development server:
+See the root README for commands and the core API. Run `pnpm storybook` from the repository root, or `pnpm dev` here for the playground. `/atlas` exercises the real Atlas viewer.
 
-```bash
-yarn dev
-```
+- `src/editor/use-polygon-editor.ts`: typed model lifecycle, current callbacks, state snapshots, and explicit flushes.
+- `src/editor/PolygonOverlay.tsx`: shared SVG rendering and snap guides.
+- `src/editor/PolygonEditor.tsx`: native pointer capture, cancellation, world-coordinate conversion, touch/reticle controls, inspector.
+- `src/editor/AtlasExample.tsx`: Atlas world-event adapter, viewport scale, canvas offsets, and portal target.
+- `src/editor/Features.stories.tsx`, `AnnotationWorkbench.stories.tsx`, and `IIIF.stories.tsx`: user-facing scenarios, without autoplay.
+- `src/editor/FeatureGallery.stories.tsx`: the starting guide.
+- `src/editor/PolygonEditor.stories.tsx` and `AtlasExample.stories.tsx`: scripted regressions under Checks.
+- `e2e/editor.spec.ts`: native mouse and portrait-touch tests against Storybook.
+- `e2e/iiif.spec.ts`: optional live-service tests (`pnpm test:iiif` from the root), checking higher-resolution tiles after zoom and preserved annotation coordinates.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-To create [API routes](https://nextjs.org/docs/app/building-your-application/routing/router-handlers) add an `api/` directory to the `app/` directory with a `route.ts` file. For individual endpoints, create a subfolder in the `api` directory, like `api/hello/route.ts` would map to [http://localhost:3000/api/hello](http://localhost:3000/api/hello).
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn/foundations/about-nextjs) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_source=github.com&utm_medium=referral&utm_campaign=turborepo-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+Live IIIF stories require access to their public image services. Standard CI uses the offline Atlas fixtures; live-service tests run separately so a service outage does not fail unrelated editor checks.

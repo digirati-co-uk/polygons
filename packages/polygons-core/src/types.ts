@@ -1,4 +1,12 @@
 import type { Point, Polygon } from './polygon';
+export type { Point, Polygon } from './polygon';
+
+export type PointerType = 'mouse' | 'touch' | 'pen';
+export type BoxPlacement = 'drag' | 'tap';
+export interface SnapGrid {
+  spacing: number | [number, number];
+  origin?: Point;
+}
 
 export interface SnapTarget {
   type: 'point' | 'line' | 'parallel' | 'intersection' | 'grid';
@@ -7,6 +15,8 @@ export interface SnapTarget {
     pointIndex?: number;
     lineIndex?: number;
     polygon?: Polygon;
+    /** For axis-alignment targets: which coordinate of the pointer this target corrects. */
+    axis?: 'x' | 'y';
   };
   distance: number;
 }
@@ -50,6 +60,17 @@ export interface RenderState {
   snapThreshold: number;
   isSnapping: boolean;
   snapPoint: Point | null;
+  /** Optional additions keep existing consumers' state literals compatible. */
+  rawPointer?: Point | null;
+  /** Resolved placement feedback, leaving pointer/rawPointer compatible with hosts. */
+  previewPoint?: Point | null;
+  /** True while a line drag is bending the segment (Alt) rather than inserting a point. */
+  splitBend?: boolean;
+  activeBezierControl?: { pointIndex: number; control: 0 | 1 } | null;
+  activeHandle?: Point | null;
+  boxPending?: Point | null;
+  snapSources?: InputShape[];
+  snapGrid?: SnapGrid;
 }
 
 export interface SlowState {
@@ -88,9 +109,16 @@ export interface SlowState {
   snapEnabled: boolean;
   snapToPoints: boolean;
   snapToLines: boolean;
+  /** Snap to the curved (Bézier) edges of shapes, not just straight ones. On by default. */
+  snapToCurves: boolean;
   snapToIntersections: boolean;
   snapToGrid: boolean;
   snapToParallel: boolean;
+  pointerType?: PointerType;
+  boxPlacement?: BoxPlacement;
+  boxPending?: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 /**
@@ -137,7 +165,7 @@ export interface TransitionIntent {
   start?(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers,
+    modifiers: Modifiers
   ): {
     isOpen?: boolean;
     points?: Point[];
@@ -147,7 +175,7 @@ export interface TransitionIntent {
   commit(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers,
+    modifiers: Modifiers
   ): { selectedPoints?: number[]; points?: Point[]; isOpen?: boolean; tool?: ValidTools } | void;
 }
 
@@ -161,7 +189,7 @@ export interface ActionIntent {
   commit(
     pointers: Point[],
     state: RenderState,
-    modifiers: Modifiers,
+    modifiers: Modifiers
   ): {
     selectedPoints?: number[];
     points?: Point[];

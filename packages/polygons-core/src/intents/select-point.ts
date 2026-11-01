@@ -2,8 +2,6 @@ import type { Point } from '../polygon';
 import type { ActionIntent, Modifiers, RenderState } from '../types';
 import { selectMultiplePoints } from './select-multiple-points';
 
-const threshold = 10;
-
 export const selectPoint: ActionIntent = {
   type: 'select-point',
   label: 'Select point',
@@ -13,6 +11,7 @@ export const selectPoint: ActionIntent = {
     Shift: 'Add to selection',
   },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
+    const threshold = modifiers.proximity;
     let skipIndex = -1;
     if (state.selectedPoints.length === 1) {
       const selected = state.selectedPoints[0];

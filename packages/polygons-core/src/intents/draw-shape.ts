@@ -24,8 +24,8 @@ export const drawShape: TransitionIntent = {
   },
   transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     let currentPointer = pointers[0];
-    if (!modifiers.Shift && state.slowState.snapEnabled) {
-      updateSnapState(currentPointer, state, 3);
+    if (modifiers.Shift || state.slowState.snapEnabled) {
+      updateSnapState(currentPointer, state, 3, undefined, modifiers.Shift);
       currentPointer = applySnapToPointer(currentPointer, state);
     }
     state.transitionDraw.push(currentPointer);

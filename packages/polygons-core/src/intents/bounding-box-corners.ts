@@ -1,4 +1,5 @@
 import { distance } from '../math';
+import { resolvePoint } from '../snap-utils';
 import { type Point, type Polygon, updateBoundingBox } from '../polygon';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 
@@ -18,13 +19,14 @@ export const boundingBoxCorners: TransitionIntent = {
     if (state.isOpen) return false;
     // No bounding box.
     if (!state.slowState.boxMode && state.selectedPoints.length !== state.polygon.points.length) return false;
-    if (!state.polygon.boundingBox) return false;
+    if (!state.polygon.boundingBox || state.polygon.boundingBox.width <= 0 || state.polygon.boundingBox.height <= 0)
+      return false;
     // Config
     const margin = modifiers.proximity * 0.5;
 
     // This is when the modifier key is used.
     // const proximity = modifiers.Meta ? modifiers.proximity * 2 : modifiers.proximity;
-    const proximity = modifiers.proximity * 5;
+    const proximity = modifiers.proximity * (state.slowState.pointerType === 'touch' ? 1 : 5);
 
     // Types
     // - Scale from opposite corner
@@ -85,7 +87,7 @@ export const boundingBoxCorners: TransitionIntent = {
               y <= distanceItem[1] + modifiers.proximity * 2
             ))
         ) {
-          if (!state.slowState.boxMode) {
+          if (!state.slowState.boxMode && state.slowState.pointerType !== 'touch') {
             state.transitionRotate = true;
           }
         }
@@ -124,7 +126,7 @@ export const boundingBoxCorners: TransitionIntent = {
   transition(pointers, state, modifiers) {
     const box = state.polygon.boundingBox!;
     const start = state.transitionOrigin || pointers[0];
-    const [mx, my] = pointers[0];
+    let [mx, my] = pointers[0];
 
     // -------------------------
     // ROTATION
@@ -150,7 +152,18 @@ export const boundingBoxCorners: TransitionIntent = {
         const y2 = x1 * sin + y1 * cos;
         const x3 = x2 + origin[0];
         const y3 = y2 + origin[1];
-        newPoints.push(point.length === 6 ? [x3, y3, point[2], point[3], point[4], point[5]] : [x3, y3]);
+        newPoints.push(
+          point.length === 6
+            ? [
+                x3,
+                y3,
+                point[2] * cos - point[3] * sin,
+                point[2] * sin + point[3] * cos,
+                point[4] * cos - point[5] * sin,
+                point[4] * sin + point[5] * cos,
+              ]
+            : [x3, y3]
+        );
       }
 
       state.transitionPoints = newPoints;
@@ -169,6 +182,17 @@ export const boundingBoxCorners: TransitionIntent = {
     // Which corner is being dragged (signs of the corner vector).
     // se → (+1,+1), sw → (-1,+1), ne → (+1,-1), nw → (-1,-1)
     const dir = state.transitionDirection as 'se' | 'sw' | 'ne' | 'nw';
+    if (!dir) return;
+    const corner: Point = [
+      dir.includes('e') ? box.x + box.width : box.x,
+      dir.includes('s') ? box.y + box.height : box.y,
+    ];
+    const target = resolvePoint([corner[0] + mx - start[0], corner[1] + my - start[1]], state, {
+      disableSnap: modifiers.Shift,
+    });
+    state.activeHandle = target;
+    mx = start[0] + target[0] - corner[0];
+    my = start[1] + target[1] - corner[1];
     const sx = dir.includes('e') ? 1 : -1;
     const sy = dir.includes('s') ? 1 : -1;
 
@@ -248,6 +272,24 @@ export const boundingBoxCorners: TransitionIntent = {
       scaleY = (box.height + dy) / box.height;
     }
 
+    // Fit the complete transformation, including the opposite side in Alt mode.
+    // Clipping vertices at commit would break fixed aspect ratios.
+    const bounds = state.slowState.bounds;
+    if (bounds) {
+      let fit = 1;
+      for (const point of state.polygon.points) {
+        const vx = (point[0] - origin[0]) * scaleX;
+        const vy = (point[1] - origin[1]) * scaleY;
+        if (vx > 0) fit = Math.min(fit, (bounds.x + bounds.width - origin[0]) / vx);
+        if (vx < 0) fit = Math.min(fit, (bounds.x - origin[0]) / vx);
+        if (vy > 0) fit = Math.min(fit, (bounds.y + bounds.height - origin[1]) / vy);
+        if (vy < 0) fit = Math.min(fit, (bounds.y - origin[1]) / vy);
+      }
+      fit = Math.max(0, fit);
+      scaleX *= fit;
+      scaleY *= fit;
+    }
+
     // Apply scale about the chosen origin
     const newPoints: Point[] = [];
     for (const point of state.polygon.points) {
@@ -257,7 +299,11 @@ export const boundingBoxCorners: TransitionIntent = {
       const y2 = y1 * scaleY;
       const x3 = x2 + origin[0];
       const y3 = y2 + origin[1];
-      newPoints.push(point.length === 6 ? [x3, y3, point[2], point[3], point[4], point[5]] : [x3, y3]);
+      newPoints.push(
+        point.length === 6
+          ? [x3, y3, point[2] * scaleX, point[3] * scaleY, point[4] * scaleX, point[5] * scaleY]
+          : [x3, y3]
+      );
     }
 
     state.transitionPoints = newPoints;

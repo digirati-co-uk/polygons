@@ -1,5 +1,5 @@
-import { closestVertex, type Point } from '../polygon';
-import { applySnapToPointer, updateSnapState } from '../snap-utils';
+import { closestVertex, reattachHandles, type Point } from '../polygon';
+import { resolvePoint } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 import { boundingBoxCorners } from './bounding-box-corners';
 
@@ -8,7 +8,7 @@ export const movePoint: TransitionIntent = {
   label: 'Move point',
   tools: ['pointer', 'pen', 'line'],
   modifiers: {
-    Shift: 'Constrain to axis',
+    Shift: 'Constrain to axis, snap to curves only',
   },
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     // Are we in proximity of any selected points?
@@ -19,6 +19,8 @@ export const movePoint: TransitionIntent = {
       return false;
     }
 
+    if (state.slowState.boxMode && (!state.polygon.boundingBox?.width || !state.polygon.boundingBox?.height))
+      return false;
     const threshold = modifiers.proximity;
 
     const [x, y] = pointers[0];
@@ -63,7 +65,7 @@ export const movePoint: TransitionIntent = {
       };
     }
 
-    if (state.slowState.closestPoint && !state.selectedPoints.includes(state.slowState.closestPoint)) {
+    if (state.slowState.closestPoint !== null && !state.selectedPoints.includes(state.slowState.closestPoint)) {
       // We select the closest point.
       const idx = state.slowState.closestPoint;
 
@@ -78,37 +80,21 @@ export const movePoint: TransitionIntent = {
     }
     // Translate the selected points
     const starting = state.transitionOrigin!;
-    let currentPointer = pointers[0];
-
-    // Update snapping state and apply snap if available (unless Shift is pressed)
-    if (!modifiers.Shift && state.slowState.snapEnabled) {
-      updateSnapState(currentPointer, state, 3); // Show up to 3 snap guides
-      currentPointer = applySnapToPointer(currentPointer, state);
-    }
-
-    const [x, y] = currentPointer;
     const points = state.polygon.points;
-    let selectedPoints = state.selectedPoints;
-
-    if (state.slowState.closestPoint) {
-      const idx = state.slowState.closestPoint;
-      if (selectedPoints.indexOf(idx) === -1) {
-        selectedPoints = [idx];
-      }
+    const selectedPoints = state.selectedPoints;
+    const anchor = points[selectedPoints[0]];
+    if (!anchor) return;
+    let dx = pointers[0][0] - starting[0];
+    let dy = pointers[0][1] - starting[1];
+    if (modifiers.Shift) {
+      if (Math.abs(dx) > Math.abs(dy)) dy = 0;
+      else dx = 0;
     }
-
+    const target = resolvePoint([anchor[0] + dx, anchor[1] + dy], state, { disableSnap: modifiers.Shift });
+    state.activeHandle = target;
+    dx = target[0] - anchor[0];
+    dy = target[1] - anchor[1];
     const transitionPoints: Point[] = [];
-
-    let dx = x - starting[0];
-    let dy = y - starting[1];
-
-    if (modifiers.Shift && !state.slowState.snapEnabled) {
-      if (Math.abs(dx) > Math.abs(dy)) {
-        dy = 0;
-      } else {
-        dx = 0;
-      }
-    }
 
     for (let i = 0; i < points.length; i++) {
       const selected = selectedPoints.indexOf(i) !== -1;
@@ -123,7 +109,7 @@ export const movePoint: TransitionIntent = {
         transitionPoints.push(p);
       }
     }
-    state.transitionPoints = transitionPoints;
+    state.transitionPoints = reattachHandles(points, transitionPoints, state.isOpen);
   },
   commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
     if (state.slowState.boxMode) {

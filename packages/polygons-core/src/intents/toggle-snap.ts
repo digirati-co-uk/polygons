@@ -16,7 +16,8 @@ export const toggleSnap: ActionIntent = {
     // This is a special case where we need to modify state directly
     // since the intent system doesn't support slowState updates
     const newSnapEnabled = !state.slowState.snapEnabled;
-    state.slowState.snapEnabled = newSnapEnabled;
+    // The helper publishes this change after the action returns.
+    state.slowState = { ...state.slowState, snapEnabled: newSnapEnabled };
 
     // If disabling snapping, clear any active snap state
     if (!newSnapEnabled) {

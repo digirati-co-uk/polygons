@@ -12,6 +12,7 @@ import { deselectPoints } from './intents/deselect-points';
 import { drawShape } from './intents/draw-shape';
 import { moveLine } from './intents/move-line';
 import { movePoint } from './intents/move-point';
+import { moveBezierControl } from './intents/move-bezier-control';
 import { moveShape } from './intents/move-shape';
 import { nudgeDown, nudgeLeft, nudgeRight, nudgeUp } from './intents/nudge';
 import { selectMultiplePoints } from './intents/select-multiple-points';
@@ -22,17 +23,26 @@ import { splitLine } from './intents/split-line';
 import { stampFixedSizeShape } from './intents/stamp-fixed-size-shape';
 import { stampShape } from './intents/stamp-shape';
 import { toggleSnap } from './intents/toggle-snap';
+import { tapBox as tapBoxIntent, tapBoxPoints } from './intents/tap-box';
 import { translateBoundingBox } from './intents/translate-bounding-box';
-import { distance, isRectangle } from './math';
+import { distance, isRectangle, clampXYToBounds } from './math';
 import {
   precalculate as _precalculate,
   type Point,
   type Polygon,
   perimeterNearestTo,
+  reattachHandles,
   updateBoundingBox,
 } from './polygon';
 import * as shapes from './shapes';
-import { applySnapToPointer, clearSnapState, updateSnapState } from './snap-utils';
+import {
+  applySnapToPointer,
+  clearSnapState,
+  updateSnapState,
+  resolvePoint,
+  clampPoint,
+  invalidateSnapCache,
+} from './snap-utils';
 import type {
   ActionIntent,
   InputShape,
@@ -42,6 +52,9 @@ import type {
   SlowState,
   TransitionIntent,
   ValidTools,
+  PointerType,
+  BoxPlacement,
+  SnapGrid,
 } from './types';
 
 const requestAnimationFrame =
@@ -54,7 +67,7 @@ function isCreationTool(tool: ValidTools): boolean {
   return !['hand', 'pointer'].includes(tool);
 }
 
-interface CreateHelperInput {
+export interface CreateHelperInput {
   id?: string;
   open?: boolean;
   points?: Array<Point>;
@@ -67,6 +80,14 @@ interface CreateHelperInput {
   emitter?: Emitter<PolygonEvents>;
   bounds?: { x: number; y: number; width: number; height: number };
   customSetState?: (state: Partial<RenderState>) => void;
+  onStateChange?: (state: SlowState) => void;
+  pointerType?: PointerType;
+  proximity?: number;
+  touchProximity?: number;
+  dragThreshold?: number;
+  boxPlacement?: BoxPlacement;
+  dragOffset?: [number, number];
+  historyLimit?: number;
 }
 
 interface OnSaveOutput {
@@ -79,6 +100,8 @@ export type PolygonEvents = {
   'polygons.start-transition': { transitionIntent: string };
   'polygons.end-transition': { transitionIntent: string; response: ReturnType<TransitionIntent['commit']> };
   'polygons.transition': { transitionIntent: string };
+  'polygons.cancel-transition': { transitionIntent: string | null; reason: string };
+  'polygons.committed': { transitionIntent: string; shape: InputShape };
 };
 
 /**
@@ -99,6 +122,7 @@ export type PolygonEvents = {
  * UI to the screen.
  */
 const transitionIntents = [
+  moveBezierControl,
   boundingBoxCorners,
   movePoint,
   moveLine,
@@ -215,6 +239,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     isToolSwitchingLocked: false,
     canDeselect: false,
     canDelete: true,
+    pointerType: input?.pointerType || 'mouse',
+    boxPlacement: input?.boxPlacement || 'drag',
+    boxPending: false,
+    canUndo: false,
+    canRedo: false,
     cursor: 'default',
     // Initialize tools with defaults based on initialTool
     enabledTools,
@@ -225,6 +254,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     snapEnabled: false,
     snapToPoints: true,
     snapToLines: true,
+    snapToCurves: true,
     snapToIntersections: true,
     snapToGrid: false,
     snapToParallel: true,
@@ -232,9 +262,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
 
   // This is state that will change frequently, and used in the clock-managed render function.
   const state: RenderState = {
-    isOpen: typeof input?.open === 'boolean' ? input.open : false,
+    isOpen: typeof input?.open === 'boolean' ? input.open : ['pen', 'line', 'lineBox', 'pencil'].includes(initialTool),
     polygon: {
-      points: input?.points || [],
+      points: input?.points?.map((p) => [...p] as Point) || [],
       iedges: null,
       boundingBox: null,
       isBezier: null,
@@ -264,6 +294,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     snapThreshold: 15,
     isSnapping: false,
     snapPoint: null,
+    rawPointer: null,
+    activeHandle: null,
+    boxPending: null,
   };
 
   // This is state held internally to the helper.
@@ -279,6 +312,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     transitionIntent: null as TransitionIntent | null,
     undoStack: [] as Array<UndoStackItem>,
     undoStackPointer: -1,
+    running: false,
+    lastFrameTime: null as number | null,
+    revision: 0,
   };
 
   const pointerState = {
@@ -289,94 +325,132 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     noTransition: false,
   };
 
+  let pendingPartial: Partial<SlowState> = {};
+  let gestureBaseline: UndoStackItem | null = null;
+  let pointerOverride: Point | null = null;
+  let blockedByMultiTouch = false;
+  let dragOffset: [number, number] = input?.dragOffset || [0, 0];
+  const historyLimit = Math.max(2, input?.historyLimit || 100);
+
   function precalculate(polygon: Polygon) {
+    invalidateSnapCache(polygon.points);
     _precalculate(polygon);
-    if (polygon.isBezier) {
-      setState({ bezierLines: polygon.bezierLines });
-    }
+    setState({ bezierLines: polygon.bezierLines });
     updateBoundingBox(polygon);
     internals.shouldUpdate = true;
   }
 
   precalculate(state.polygon);
 
-  // Internal set slow state function.
+  // Model changes are synchronous. Only subscriber notifications are batched.
   function setState(newState: Partial<SlowState>) {
-    const keys = Object.keys(newState);
-    if (keys.length === 0) return;
-    const readOnlySlowState = internals.nextSlowState || state.slowState;
-
-    let change = false;
-    // Optimise validIntentKeys
-    if (keys.length === 1 && keys[0] === 'validIntentKeys' && readOnlySlowState.validIntentKeys) {
-      const keysA = Object.keys(readOnlySlowState.validIntentKeys);
-      const keysB = Object.keys(newState.validIntentKeys || {});
-      if (keysA.length === keysB.length) {
-        for (const key of keysA) {
-          if (readOnlySlowState.validIntentKeys[key] !== (newState.validIntentKeys as any)[key]) {
-            change = true;
-          }
-        }
-        if (!change) {
-          return;
-        }
-      }
+    const changed: Partial<SlowState> = {};
+    for (const key of Object.keys(newState) as Array<keyof SlowState>) {
+      const next = newState[key];
+      const current = state.slowState[key];
+      if (
+        Array.isArray(next) &&
+        Array.isArray(current) &&
+        next.length === current.length &&
+        next.every((v, i) => v === current[i])
+      )
+        continue;
+      if (next !== current) (changed as any)[key] = next;
     }
-
-    // Optimise selectedPoints
-    if (newState.selectedPoints) {
-      // Check if they contain the same elements.
-      const pointsA = Array.from(readOnlySlowState.selectedPoints || []);
-      const pointsB = Array.from(newState.selectedPoints || []);
-      if (pointsA.length === pointsB.length) {
-        for (const point of pointsA) {
-          if (!pointsB.includes(point)) {
-            change = true;
-            break;
-          }
-        }
-      } else {
-        change = true;
-      }
-
-      if (!change) {
-        delete newState.selectedPoints;
-      }
-    }
-
-    if (keys.length === 1 && keys.includes('hasClosestLine')) {
-      if (newState.hasClosestLine === readOnlySlowState.hasClosestLine) {
-        return;
-      }
-    }
-
-    if (internals.nextSlowState) {
-      internals.nextSlowState = { ...internals.nextSlowState, ...newState };
-      return;
-    }
-    internals.nextSlowState = { ...state.slowState, ...newState };
+    if (!Object.keys(changed).length) return;
+    state.slowState = { ...state.slowState, ...changed };
+    if (changed.selectedPoints) state.selectedPoints = changed.selectedPoints;
+    pendingPartial = { ...pendingPartial, ...changed };
+    internals.nextSlowState = state.slowState;
+    if (changed.snapEnabled === false) clearSnapState(state);
   }
 
-  // 1. Create the clock
-  function clockFunction(delta: number, stop = false) {
-    internals.time += delta;
-
-    // This _might_ be slowed down later.
-    flushSetState();
+  function refresh() {
     updateBoundingBoxVisibility();
-    updateClosestIntersection();
-    updateClosestPoint();
-    updateShapeIntersection();
-    updateCurrentIntent();
+    if (!pointerState.isPressed && !state.slowState.transitioning) {
+      updateClosestIntersection();
+      updateClosestPoint();
+      updateShapeIntersection();
+      updateCurrentIntent();
+    }
     calculateLine();
     calculateLineBox();
     updateIsRectangle();
+    if (!state.slowState.snapEnabled || getModifiers().Shift) clearSnapState(state);
+    if (state.boxPending && state.pointer) previewTapBox();
+    updatePlacementPreview();
+    updateCursor();
+  }
 
-    // Then the render function from the user last, once the state is updated.
+  function updatePlacementPreview() {
+    state.previewPoint = null;
+    if (!state.pointer || state.slowState.noShape) return;
+    if (state.slowState.transitioning) {
+      state.previewPoint = state.activeHandle || null;
+      return;
+    }
+    const type = state.slowState.actionIntentType;
+    if (state.isOpen && (type === 'close-shape' || type === 'close-shape-line')) {
+      const opposite = state.selectedPoints[0] === 0 ? state.polygon.points.length - 1 : 0;
+      state.previewPoint = state.polygon.points[opposite];
+      if (state.line) state.line = [state.line[0], state.previewPoint];
+      return;
+    }
+    if (state.slowState.transitionIntentType === 'split-line' && state.closestLinePoint) {
+      // With Alt held the drag bends the line instead, so there is no new point to preview.
+      if (getModifiers().Alt) return;
+      // Hovering a line: show exactly where the new point will land.
+      state.previewPoint = state.closestLinePoint;
+      return;
+    }
+    const tool = state.slowState.currentTool;
+    const placement = state.isOpen && ['pen', 'line', 'lineBox', 'pencil'].includes(tool);
+    const stamp =
+      ['box', 'stamp'].includes(tool) &&
+      (!state.polygon.points.length || state.slowState.transitionIntentType === 'stamp-shape');
+    if (placement || stamp || state.boxPending) {
+      state.previewPoint = state.line?.[1] || resolvePoint(state.pointer, state, { disableSnap: getModifiers().Shift });
+    }
+  }
+
+  function updateCursor() {
+    const slow = state.slowState;
+    let cursor = ['pen', 'box', 'line', 'lineBox', 'stamp', 'pencil'].includes(slow.currentTool)
+      ? 'crosshair'
+      : 'default';
+    const intent = slow.transitionIntentType;
+    if (slow.currentTool === 'hand') cursor = slow.transitioning ? 'grabbing' : 'grab';
+    else if (['close-shape', 'close-shape-line'].includes(slow.actionIntentType || '')) cursor = 'pointer';
+    else if (intent === 'move-bezier-control') cursor = slow.transitioning ? 'grabbing' : 'grab';
+    else if (intent === 'bounding-box-corners' || (intent === 'move-point' && slow.boxMode)) {
+      cursor = state.transitionRotate
+        ? 'alias'
+        : state.transitionDirection === 'ne' || state.transitionDirection === 'sw'
+        ? 'nesw-resize'
+        : 'nwse-resize';
+    } else if (['move-point', 'move-line', 'move-shape', 'move-bounding-box'].includes(intent || ''))
+      cursor = slow.transitioning ? 'grabbing' : 'move';
+    else if (intent === 'select-multiple-points') cursor = 'crosshair';
+    else if (intent === 'split-line' || slow.actionIntentType === 'cut-line') cursor = 'copy';
+    setState({ cursor });
+  }
+
+  function clockFunction(delta: number, stop = false) {
+    internals.time += delta;
+    refresh();
+    flushSetState();
     internals.renderFunc(state, state.slowState, delta);
+    if (!stop) scheduleFrame();
+  }
 
-    if (stop) return;
-    internals.animationFrame = requestAnimationFrame(clockFunction);
+  function scheduleFrame() {
+    if (!internals.running || internals.animationFrame) return;
+    internals.animationFrame = requestAnimationFrame((timestamp: number) => {
+      internals.animationFrame = 0;
+      const delta = internals.lastFrameTime === null ? 0 : timestamp - internals.lastFrameTime;
+      internals.lastFrameTime = timestamp;
+      clockFunction(Number.isFinite(delta) ? delta : 16);
+    });
   }
 
   // Clock update functions
@@ -386,37 +460,17 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   // They should be listed here in the order they are called, so this section
   // can be read as the "clock".
   function flushSetState() {
-    if (internals.shouldUpdate) {
-      onSave({
-        id: state.slowState.shapeId || undefined,
-        open: state.isOpen,
-        points: state.polygon.points,
-      });
-      internals.shouldUpdate = false;
+    const partial = pendingPartial;
+    pendingPartial = {};
+    internals.nextSlowState = null;
+    if (Object.keys(partial).length) {
+      internals.setStateFunc(state.slowState);
+      input?.customSetState?.(partial as Partial<RenderState>);
+      input?.onStateChange?.(state.slowState);
     }
-
-    if (internals.nextSlowState && internals.nextSlowState !== state.slowState) {
-      const keys = Object.keys(state.slowState) as Array<keyof SlowState>;
-      const nextState: Record<string, any> = {};
-      const nextPartialState: Record<string, any> = {};
-      let didChange = false;
-      for (const key of keys) {
-        const current = state.slowState[key];
-        const next = internals.nextSlowState[key];
-        if (current !== next) {
-          didChange = true;
-          nextState[key] = next;
-          nextPartialState[key] = next;
-        } else {
-          nextState[key] = current;
-        }
-      }
-      if (didChange) {
-        state.slowState = nextState as SlowState;
-        internals.nextSlowState = null;
-        internals.setStateFunc(state.slowState);
-        input?.customSetState?.(nextPartialState);
-      }
+    if (internals.shouldUpdate) {
+      internals.shouldUpdate = false;
+      onSave({ id: state.slowState.shapeId || undefined, open: state.isOpen, points: state.polygon.points });
     }
   }
 
@@ -434,10 +488,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   }
 
   function applyUndo(resp: { points: Point[]; selectedPoints: number[]; isOpen: boolean }) {
-    state.selectedPoints = resp.selectedPoints;
+    state.selectedPoints = [...resp.selectedPoints];
     setState({ selectedPoints: resp.selectedPoints });
 
-    state.polygon.points = resp.points;
+    state.polygon.points = resp.points.map((p) => [...p] as Point);
     state.polygon.boundingBox = null;
     state.polygon.iedges = null;
     state.polygon.isBezier = null;
@@ -450,34 +504,53 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     }
   }
 
-  function undo() {
-    if (internals.undoStackPointer === -1) return;
-    internals.undoStackPointer--;
-    const resp = internals.undoStack[internals.undoStackPointer];
+  function snapshot(): UndoStackItem {
+    return {
+      isOpen: state.isOpen,
+      points: state.polygon.points.map((p) => [...p] as Point),
+      selectedPoints: [...state.selectedPoints],
+    };
+  }
 
-    applyUndo(resp);
+  function updateHistoryState() {
+    setState({
+      canUndo: internals.undoStackPointer > 0,
+      canRedo: internals.undoStackPointer < internals.undoStack.length - 1,
+    });
+  }
+
+  function undo() {
+    if (internals.undoStackPointer <= 0) return;
+    cancelGesture('undo');
+    applyUndo(internals.undoStack[--internals.undoStackPointer]);
+    updateHistoryState();
   }
 
   function redo() {
-    if (internals.undoStackPointer === internals.undoStack.length - 1) return;
-    internals.undoStackPointer++;
-    const resp = internals.undoStack[internals.undoStackPointer];
-
-    applyUndo(resp);
+    if (internals.undoStackPointer >= internals.undoStack.length - 1) return;
+    cancelGesture('redo');
+    applyUndo(internals.undoStack[++internals.undoStackPointer]);
+    updateHistoryState();
   }
 
   function pushUndo(resp: UndoStackItem) {
-    internals.undoStackPointer++;
-    internals.undoStack[internals.undoStackPointer] = resp;
-
-    if (internals.undoStack.length > 15) {
-      internals.undoStack.shift();
-      internals.undoStackPointer--;
-    }
+    const previous = internals.undoStack[internals.undoStackPointer];
+    if (previous && previous.isOpen === resp.isOpen && JSON.stringify(previous.points) === JSON.stringify(resp.points))
+      return;
+    internals.undoStack.splice(internals.undoStackPointer + 1);
+    internals.undoStack.push({
+      isOpen: resp.isOpen,
+      points: resp.points.map((p) => [...p] as Point),
+      selectedPoints: [...resp.selectedPoints],
+    });
+    if (internals.undoStack.length > historyLimit) internals.undoStack.shift();
+    internals.undoStackPointer = internals.undoStack.length - 1;
+    updateHistoryState();
   }
 
   function updateIsRectangle() {
-    setState({ boxMode: isRectangle(state.polygon.points || []) });
+    // An open outline that merely looks rectangular is still being drawn: it must stay closable.
+    setState({ boxMode: !state.isOpen && !state.polygon.isBezier && isRectangle(state.polygon.points || []) });
   }
 
   function updateShapeIntersection() {
@@ -528,17 +601,16 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       return;
 
     const [x, y] = state.pointer;
-    const pointDistances = state.polygon.points
-      .map((point, idx) => {
-        const dx = point[0] - x;
-        const dy = point[1] - y;
-        return [dx * dx + dy * dy, idx];
-      })
-      .sort((a, b) => a[0] - b[0]);
-
-    if (pointDistances.length) {
-      setState({ closestPoint: pointDistances[0][1] });
-    }
+    let nearest = 0;
+    let best = Infinity;
+    state.polygon.points.forEach((point, idx) => {
+      const d = (point[0] - x) ** 2 + (point[1] - y) ** 2;
+      if (d < best) {
+        best = d;
+        nearest = idx;
+      }
+    });
+    setState({ closestPoint: nearest });
   }
 
   function updateClosestIntersection() {
@@ -551,7 +623,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       return;
     }
 
-    const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, state.pointer);
+    const [intersection, distance, line, prevIdx] = perimeterNearestTo(state.polygon, state.pointer, state.isOpen);
 
     // Distance is squared.
 
@@ -625,13 +697,14 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     // We are not yet transitioning, and need to feed back to the user.
     for (let i = 0; i < transitionIntentsLength; i++) {
       const intent = transitionIntents[i];
+      if (intent.type === 'snap') continue;
       // Skip intents that don't apply to the current tool
       if (!intent.tools.includes(currentTool)) continue;
 
       const isValid = intent.isValid(
         pointerState.isPressed ? [pointerState.lastPress!] : [state.pointer],
         state,
-        getModifiers(),
+        getModifiers()
       );
       if (isValid) {
         if (internals.transitionIntent === intent) {
@@ -720,7 +793,16 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
 
   function calculateLine() {
     const pointer = state.pointer;
-    if (!pointer || !isDrawing() || state.slowState.noShape) return;
+    if (
+      !pointer ||
+      !isDrawing() ||
+      state.slowState.noShape ||
+      state.slowState.transitioning ||
+      !['pen', 'line', 'lineBox'].includes(state.slowState.currentTool)
+    ) {
+      state.line = null;
+      return;
+    }
 
     const point = state.selectedPoints[0];
     let snappedPointer = pointer;
@@ -742,12 +824,12 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
         if (point === 0) {
           prevAngle = Math.atan2(
             state.polygon.points[1][1] - state.polygon.points[0][1],
-            state.polygon.points[1][0] - state.polygon.points[0][0],
+            state.polygon.points[1][0] - state.polygon.points[0][0]
           );
         } else {
           prevAngle = Math.atan2(
             state.polygon.points[point - 1][1] - state.polygon.points[point][1],
-            state.polygon.points[point - 1][0] - state.polygon.points[point][0],
+            state.polygon.points[point - 1][0] - state.polygon.points[point][0]
           );
         }
       }
@@ -786,40 +868,39 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     return state.slowState.modifiers;
   }
 
-  function commit(intent: ActionIntent | TransitionIntent) {
-    const resp = intent.commit([pointerState.lastPress!], state, getModifiers());
-    emitter.emit('polygons.end-transition', { transitionIntent: intent.type, response: resp });
-    if (resp) {
-      if (resp.tool) {
-        setTool(resp.tool);
-      }
-      if (resp.selectedPoints) {
-        state.selectedPoints = resp.selectedPoints;
-        setState({ selectedPoints: resp.selectedPoints });
-      }
-      if (resp.points) {
-        state.polygon.points = resp.points;
-        state.polygon.boundingBox = null;
-        state.polygon.iedges = null;
-        state.polygon.isBezier = null;
-        state.transitionBoundingBox = null;
-        precalculate(state.polygon);
-        setState({ closestPoint: null, selectedStamp: null });
-      }
-      if (resp.isOpen === true || resp.isOpen === false) {
-        state.isOpen = resp.isOpen;
-        internals.shouldUpdate = true;
-      }
-      pushUndo({
-        isOpen: state.isOpen,
-        points: state.polygon.points,
-        selectedPoints: state.selectedPoints,
-      });
-
-      // Update tool visibility after commit changes
-      updateToolVisibility(state.slowState.currentTool);
+  function applyResponse(resp: ReturnType<ActionIntent['commit']>, type: string) {
+    if (!resp) return;
+    if (resp.points && !resp.points.every((p) => (p.length === 2 || p.length === 6) && p.every(Number.isFinite)))
+      return;
+    if (resp.points) {
+      state.polygon.points = resp.points.map((p) => clampPoint(p, state));
+      state.polygon.boundingBox = null;
+      state.polygon.iedges = null;
+      state.polygon.isBezier = null;
+      precalculate(state.polygon);
+      setState({ closestPoint: null });
     }
+    if (typeof resp.isOpen === 'boolean') {
+      state.isOpen = resp.isOpen;
+      internals.shouldUpdate = true;
+    }
+    if (resp.selectedPoints) setState({ selectedPoints: resp.selectedPoints });
+    if (resp.tool) setTool(resp.tool);
+    pushUndo(snapshot());
     setState({ transitionModifiers: null });
+    emitter.emit('polygons.committed', {
+      transitionIntent: type,
+      shape: { id: state.slowState.shapeId || undefined, open: state.isOpen, points: state.polygon.points },
+    });
+  }
+
+  function commit(intent: ActionIntent | TransitionIntent) {
+    const revision = internals.revision;
+    const resp = intent.commit([pointerState.lastPress || state.pointer || [0, 0]], state, getModifiers());
+    // Keep the legacy event order, but never overwrite a replacement made by its listener.
+    emitter.emit('polygons.end-transition', { transitionIntent: intent.type, response: resp });
+    if (revision !== internals.revision) return;
+    applyResponse(resp, intent.type);
   }
 
   function validate(intent: ActionIntent | TransitionIntent) {
@@ -856,6 +937,18 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       // Skip intents that don't apply to the current tool
       if (!keyIntent.tools.includes(currentTool)) continue;
       if (validate(keyIntent)) {
+        if (keyIntent.type === 'toggle-snap') {
+          snap.toggle();
+          return true;
+        }
+        if (keyIntent.type.startsWith('nudge-')) {
+          const amount = getModifiers().Shift ? BASE_PROXIMITY * state.scale * 1.2 : 1;
+          nudge(
+            key === 'ArrowRight' ? amount : key === 'ArrowLeft' ? -amount : 0,
+            key === 'ArrowDown' ? amount : key === 'ArrowUp' ? -amount : 0
+          );
+          return true;
+        }
         commit(keyIntent);
         return true;
       }
@@ -888,7 +981,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
           Alt: false,
           Shift: false,
           Meta: false,
-          proximity: BASE_PROXIMITY,
+          proximity: getProximity(),
         },
       });
     },
@@ -1001,17 +1094,20 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   // state uses "world" coordinates, so this is the only thing that needs
   // to be taken into consideration as the world may be scaled.
   function setScale(scale: number) {
+    if (!Number.isFinite(scale) || scale <= 0) return;
     state.scale = scale;
-    setState({
-      modifiers: {
-        ...(internals.nextSlowState?.modifiers || state.slowState.modifiers),
-        proximity: scale * BASE_PROXIMITY,
-      },
-    });
+    setState({ modifiers: { ...getModifiers(), proximity: getProximity() } });
+    clearSnapState(state);
   }
 
   function getProximity() {
-    return BASE_PROXIMITY * state.scale;
+    const base = input?.proximity ?? BASE_PROXIMITY;
+    return Math.max(base, state.slowState.pointerType === 'touch' ? input?.touchProximity ?? 22 : base) * state.scale;
+  }
+
+  function setPointerType(type: PointerType) {
+    setState({ pointerType: type });
+    setState({ modifiers: { ...getModifiers(), proximity: getProximity() } });
   }
 
   // Clock
@@ -1022,210 +1118,598 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       internals.renderFunc = renderFunc;
     },
     start: (renderFunc?: RenderFunc, setStateFunc?: SetState) => {
-      internals.startTime = performance.now();
-      internals.time = 0;
-      if (renderFunc) {
-        internals.renderFunc = renderFunc;
-      }
+      if (renderFunc) internals.renderFunc = renderFunc;
       if (setStateFunc) {
-        setStateFunc(state.slowState);
         internals.setStateFunc = setStateFunc;
+        setStateFunc(state.slowState);
       }
-      // First tick.
+      if (internals.running) return;
+      internals.running = true;
+      internals.lastFrameTime = null;
       clockFunction(0);
     },
     stop: () => {
-      if (internals.animationFrame) {
-        cancelAnimationFrame(internals.animationFrame);
-        internals.animationFrame = 0;
-      }
+      internals.running = false;
+      if (internals.animationFrame) cancelAnimationFrame(internals.animationFrame);
+      internals.animationFrame = 0;
+      internals.lastFrameTime = null;
     },
+    // Preserve legacy step scheduling. New hosts can flush without starting a loop.
     step: (deltaTime = 16) => {
+      internals.running = true;
       clockFunction(deltaTime);
     },
+    flush: (deltaTime = 0) => clockFunction(deltaTime, true),
   };
 
-  // Pointer
-  // This is the hottest path, and will be called on every pointer event.
-  // It will ensure that transitions are started, and that the state is
-  // kept in sync for the clock.
-  function pointer(pointers: Point[]) {
-    // Safety checks for invalid inputs
-    if (!pointers || !Array.isArray(pointers) || pointers.length === 0) {
-      return;
-    }
-
-    // @todo come back later to support multiple pointers (multi-touch)
-    const pointerA = pointers[0];
-
-    // Check if pointer is valid with x and y coordinates
-    if (!pointerA || (!pointerA[0] && pointerA[0] !== 0) || (!pointerA[1] && pointerA[1] !== 0)) {
-      return;
-    }
-
-    if (Number.isNaN(pointerA[0]) || Number.isNaN(pointerA[1])) {
-      return;
-    }
-
-    state.pointer = pointerA;
-
-    if (state.slowState.transitioning) {
-      // We are transitioning, we should update the transition.
-      if (internals.transitionIntent) {
-        internals.transitionIntent.transition(pointers, state, getModifiers());
-        emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
-      }
-    } else if (pointerState.isPressed && !pointerState.noTransition && pointerState.lastPress && state.pointer) {
-      // We are not transitioning, but should we start?
-      const shouldStart = !pointerState.isClicking || distance(pointerState.lastPress!, state.pointer) > 10;
-      if (shouldStart) {
-        // We are dragging, we should start transitioning.
-        clearTimeout(pointerState.pressTimeout);
-        pointerState.isClicking = false;
-
-        if (internals.transitionIntent) {
-          state.transitionOrigin = pointerState.lastPress!;
-          // internals.transitionIntent.transition(pointers, state, {});
-          setState({ transitioning: true });
-          if (internals.transitionIntent.start) {
-            const resp = internals.transitionIntent.start([pointerState.lastPress!], state, getModifiers());
-            if (resp) {
-              if (resp.selectedPoints) {
-                state.selectedPoints = resp.selectedPoints;
-                setState({ selectedPoints: resp.selectedPoints });
-              }
-              if (resp.isOpen === true || resp.isOpen === false) {
-                state.isOpen = resp.isOpen;
-                internals.shouldUpdate = true;
-              }
-              if (resp.points) {
-                state.polygon.points = resp.points;
-                state.polygon.boundingBox = null;
-                state.polygon.iedges = null;
-                precalculate(state.polygon);
-                setState({ closestPoint: null });
-              }
-            }
-          }
-          setState({ transitionModifiers: internals.transitionIntent.modifiers || null });
-          emitter.emit('polygons.start-transition', { transitionIntent: internals.transitionIntent.type });
-          internals.transitionIntent.transition([pointerState.lastPress!], state, getModifiers());
-          emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
-        } else {
-          pointerState.noTransition = true;
-        }
-      }
-    }
+  function validPoint(p: Point | null | undefined): p is Point {
+    return !!p && (p.length === 2 || p.length === 6) && p.every(Number.isFinite);
   }
 
-  // Blur
-  // This can be attached to the container for the SVG element to clear any
-  // pending pressing/clicking or transition intents. This can avoid "sticky"
-  // cursors when you move your mouse out of the SVG element.
-  // It can be attached to both the "blur" and "mouseleave" events.
-  function blur() {
-    state.pointer = null;
-    if (!state.slowState.transitioning) {
-      pointerState.isPressed = false;
-      pointerState.isClicking = false;
-      pointerState.lastPress = null;
-      setState({ transitionIntentType: null, actionIntentType: null });
-      internals.transitionIntent = null;
-      internals.actionIntent = null;
-    }
-  }
-
-  // Pointer down
-  // Attached to the SVG element. This will set up code for `pointerUp` to
-  // determine if a click or a drag is happening.
-  function pointerDown() {
-    pointerState.isClicking = true;
-    pointerState.isPressed = true;
-    pointerState.lastPress = state.pointer;
-
-    // After 250ms it's no longer a click
-    pointerState.pressTimeout = setTimeout(() => {
-      if (pointerState.isPressed) {
-        pointerState.isClicking = false;
-      }
-      // pointer([pointerState.lastPress!]);
-    }, 250) as any as number;
-  }
-
-  // Pointer up
-  // Attached to the SVG element, used to complete transitions OR actions
-  // depending on if a click was detected.
-  function pointerUp() {
-    if (state.slowState.transitioning) {
-      setState({ transitioning: false });
-      if (internals.transitionIntent) {
-        commit(internals.transitionIntent);
-      }
-      internals.transitionIntent = null;
-      setState({ transitionIntentType: null });
-    } else if (pointerState.isClicking) {
-      if (internals.actionIntent) {
-        commit(internals.actionIntent);
-      }
-      internals.actionIntent = null;
-      setState({ actionIntentType: null });
-    }
-
+  function clearGestureState() {
+    clearTimeout(pointerState.pressTimeout);
     pointerState.isPressed = false;
     pointerState.isClicking = false;
     pointerState.lastPress = null;
     pointerState.noTransition = false;
-    clearTimeout(pointerState.pressTimeout);
+    internals.transitionIntent = null;
+    internals.actionIntent = null;
+    state.transitionPoints = null;
+    state.transitionBoundingBox = null;
+    state.transitionOrigin = null;
+    state.transitionDirection = null;
+    state.transitionRotate = false;
+    state.transitionBezierLine = null;
+    state.transitionDraw = [];
+    state.selectionBox = null;
+    state.line = null;
+    state.lineBox = null;
+    state.activeHandle = null;
+    state.activeBezierControl = null;
+    state.previewPoint = null;
+    state.boxPending = null;
+    clearSnapState(state);
+    setState({
+      transitioning: false,
+      transitionIntentType: null,
+      actionIntentType: null,
+      transitionModifiers: null,
+      boxPending: false,
+    });
+  }
+
+  function cancelGesture(reason = 'cancelled') {
+    const active = pointerState.isPressed || state.slowState.transitioning || !!state.boxPending;
+    const type = state.slowState.transitionIntentType;
+    if (gestureBaseline) {
+      setState({ selectedPoints: gestureBaseline.selectedPoints });
+      state.isOpen = gestureBaseline.isOpen;
+    }
+    gestureBaseline = null;
+    clearGestureState();
+    if (active) emitter.emit('polygons.cancel-transition', { transitionIntent: type, reason });
+  }
+
+  function transitionPointer(): Point {
+    const p = state.pointer!;
+    if (
+      state.slowState.transitionIntentType === 'move-point' ||
+      state.slowState.transitionIntentType === 'bounding-box-corners'
+    ) {
+      return [p[0] + dragOffset[0] * state.scale, p[1] + dragOffset[1] * state.scale];
+    }
+    return p;
+  }
+
+  function pointer(pointers: Point[]) {
+    if (!Array.isArray(pointers) || !pointers.length) return;
+    if (pointers.length > 1) {
+      cancelGesture('multiple-pointers');
+      blockedByMultiTouch = true;
+      return;
+    }
+    if (blockedByMultiTouch || !validPoint(pointers[0])) return;
+    state.rawPointer = pointers[0];
+    state.pointer = pointerOverride || pointers[0];
+    if (state.boxPending) {
+      previewTapBox();
+      return;
+    }
+    if (state.slowState.transitioning && internals.transitionIntent) {
+      internals.transitionIntent.transition([transitionPointer()], state, getModifiers());
+      emitter.emit('polygons.transition', { transitionIntent: internals.transitionIntent.type });
+    } else if (pointerState.isPressed && pointerState.lastPress && !pointerState.noTransition) {
+      const threshold = (input?.dragThreshold ?? 10) * state.scale;
+      if (distance(pointerState.lastPress, state.pointer) > threshold && internals.transitionIntent) {
+        const intent = internals.transitionIntent;
+        gestureBaseline = snapshot();
+        pointerState.isClicking = false;
+        state.transitionOrigin = pointerState.lastPress;
+        setState({ transitioning: true, transitionModifiers: intent.modifiers || null });
+        const resp = intent.start?.([pointerState.lastPress], state, getModifiers());
+        if (resp?.selectedPoints) setState({ selectedPoints: resp.selectedPoints });
+        const revision = internals.revision;
+        emitter.emit('polygons.start-transition', { transitionIntent: intent.type });
+        if (revision !== internals.revision || !state.slowState.transitioning) return;
+        intent.transition([transitionPointer()], state, getModifiers());
+        emitter.emit('polygons.transition', { transitionIntent: intent.type });
+      }
+    } else refresh();
+  }
+
+  function blur() {
+    cancelGesture('blur');
+    state.pointer = null;
+    state.rawPointer = null;
+    setState({ closestPoint: null, hasClosestLine: false, pointerInsideShape: false });
+    state.closestLineIndex = -1;
+    state.closestLinePoint = null;
+    updateCursor();
+  }
+
+  function pointerDown(): void;
+  function pointerDown(point: Point): void;
+  function pointerDown(point?: Point) {
+    if (blockedByMultiTouch) return;
+    if (point) pointer([point]);
+    if (!state.pointer || state.slowState.noShape || pointerState.isPressed) return;
+    refresh();
+    pointerState.lastPress = state.pointer;
+    pointerState.isPressed = true;
+    pointerState.isClicking = true;
+    if (state.slowState.currentTool === 'box' && state.slowState.boxPlacement === 'tap') {
+      internals.transitionIntent = null;
+      setState({ transitionIntentType: null });
+    }
+  }
+
+  function pointerUp(): void;
+  function pointerUp(point: Point): void;
+  function pointerUp(point?: Point) {
+    if (blockedByMultiTouch) {
+      blockedByMultiTouch = false;
+      return;
+    }
+    if (!pointerState.isPressed) return;
+    if (point) pointer([point]);
+    const intent = internals.transitionIntent;
+    const action = internals.actionIntent;
+    // A successful commit may switch tools; it is no longer an active press.
+    pointerState.isPressed = false;
+    if (state.slowState.transitioning && intent) {
+      setState({ transitioning: false });
+      commit(intent);
+    } else if (pointerState.isClicking) {
+      if (state.slowState.currentTool === 'box' && state.slowState.boxPlacement === 'tap') tapBox();
+      else if (action) commit(action);
+    }
+    gestureBaseline = null;
+    // Keep a pending two-tap box between presses.
+    const pending = state.boxPending;
+    const preview = pending ? state.transitionPoints : null;
+    clearGestureState();
+    if (pending) {
+      state.boxPending = pending;
+      state.transitionPoints = preview;
+      setState({ boxPending: true });
+    }
+    refresh();
   }
 
   // setShape
   function setShape(shape: InputShape | null) {
-    state.polygon.points = shape?.points || [];
+    internals.revision++;
+    cancelGesture('shape-replaced');
+    blockedByMultiTouch = false;
+    pointerOverride = null;
+    state.pointer = null;
+    state.rawPointer = null;
+    state.polygon.points = shape?.points.map((p) => [...p] as Point) || [];
     state.polygon.boundingBox = null;
     state.polygon.iedges = null;
     state.isOpen = shape?.open || false;
-    precalculate(state.polygon);
-    internals.nextSlowState = null;
-    internals.undoStack = [];
-    internals.undoStackPointer = -1;
-    state.lineBox = null;
-    state.line = null;
-    if (pointerState.pressTimeout) {
-      clearTimeout(pointerState.pressTimeout);
-    }
-    // Reset
     setState({
       noShape: shape === null,
       shapeId: shape?.id || null,
-      transitioning: false,
-      actionIntentType: null,
-      transitionIntentType: null,
       selectedPoints: [],
-      hasClosestLine: false,
-      modifiers: {
-        Alt: false,
-        Shift: false,
-        Meta: false,
-        proximity: state.slowState.modifiers.proximity,
-      },
-      showBoundingBox: false,
-      currentModifiers: {},
-      validIntentKeys: {},
-      selectedStamp: null,
       closestPoint: null,
+      hasClosestLine: false,
       pointerInsideShape: false,
-      boxMode: false,
+      selectedStamp: null,
       fixedAspectRatio,
     });
-    setTool(initialTool);
+    state.closestLineIndex = -1;
+    state.closestLinePoint = null;
+    modifiers.reset();
+    setTool(initialTool, true);
+    precalculate(state.polygon);
+    internals.undoStack = [snapshot()];
+    internals.undoStackPointer = 0;
+    updateHistoryState();
     flushSetState();
+  }
+
+  function setBoxPlacement(placement: BoxPlacement) {
+    cancelGesture('placement-changed');
+    setState({ boxPlacement: placement });
+  }
+
+  function previewTapBox() {
+    if (!state.boxPending || !state.pointer) return;
+    const point = resolvePoint(state.pointer, state, { disableSnap: getModifiers().Shift });
+    state.transitionPoints = tapBoxPoints(state.boxPending, point, state);
+    state.activeHandle = point;
+  }
+
+  function tapBox() {
+    if (!tapBoxIntent.isValid([state.pointer!], state, getModifiers())) return;
+    const resp = tapBoxIntent.commit([state.pointer!], state, getModifiers());
+    if (resp) applyResponse(resp, 'tap-box');
+    setState({ boxPending: !!state.boxPending });
+    previewTapBox();
+  }
+
+  function setPointerOverride(point: Point | null) {
+    if (point && !validPoint(point)) return;
+    pointerOverride = point;
+    state.pointer = point || state.rawPointer || null;
+    refresh();
+  }
+
+  function addPointAt(point: Point) {
+    if (!validPoint(point) || !state.isOpen || state.slowState.noShape || state.slowState.transitioning) return false;
+    if (!['pen', 'line', 'lineBox'].includes(state.slowState.currentTool)) return false;
+    const resolved = resolvePoint(point, state, { disableSnap: getModifiers().Shift });
+    if (state.polygon.points.length && !state.selectedPoints.length)
+      setState({ selectedPoints: [state.polygon.points.length - 1] });
+    if (!addOpenPoint.isValid([resolved], state, getModifiers())) return false;
+    // The command receives a world position; an old preview must not override it.
+    state.line = null;
+    applyResponse(addOpenPoint.commit([resolved], state, getModifiers()), 'add-open-point');
+    flushSetState();
+    return true;
+  }
+
+  function finishShape(options: { close?: boolean } = {}) {
+    const close = options.close ?? state.slowState.currentTool !== 'line';
+    if (!state.isOpen || state.polygon.points.length < (close ? 3 : 2)) return false;
+    cancelGesture('finish');
+    applyResponse({ isOpen: !close, selectedPoints: [], tool: 'pointer' }, 'finish-shape');
+    flushSetState();
+    return true;
+  }
+
+  function undoLastPoint() {
+    if (!state.isOpen || !state.polygon.points.length) return false;
+    cancelGesture('undo-point');
+    const fromStart = state.selectedPoints[0] === 0;
+    const points = fromStart ? state.polygon.points.slice(1) : state.polygon.points.slice(0, -1);
+    applyResponse(
+      { points, isOpen: true, selectedPoints: points.length ? [fromStart ? 0 : points.length - 1] : [] },
+      'undo-last-point'
+    );
+    flushSetState();
+    return true;
+  }
+
+  function nudge(dx: number, dy: number, options: { screenPixels?: boolean } = {}) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || !state.selectedPoints.length || state.slowState.transitioning)
+      return false;
+    const scale = options.screenPixels ? state.scale : 1;
+    const selected = new Set(state.selectedPoints);
+    const anchors = state.polygon.points.filter((_, i) => selected.has(i));
+    if (!anchors.length) return false;
+    const xs = anchors.map((p) => p[0]),
+      ys = anchors.map((p) => p[1]);
+    const box = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+    const [worldDx, worldDy] = clampXYToBounds(dx * scale, dy * scale, box, state.slowState.bounds);
+    const points = state.polygon.points.map((p, i) => {
+      if (!selected.has(i)) return p;
+      const x = p[0] + worldDx,
+        y = p[1] + worldDy;
+      return (p.length === 6 ? [x, y, p[2], p[3], p[4], p[5]] : [x, y]) as Point;
+    });
+    applyResponse({ points: reattachHandles(state.polygon.points, points, state.isOpen) }, 'nudge');
+    flushSetState();
+    return true;
+  }
+
+  function setBezierControl(pointIndex: number, control: 0 | 1, target: Point) {
+    const point = state.polygon.points[pointIndex];
+    if (
+      (control !== 0 && control !== 1) ||
+      !point ||
+      point.length !== 6 ||
+      !validPoint(target) ||
+      state.slowState.transitioning
+    )
+      return false;
+    const clamped = clampPoint(target, state);
+    const changed = [...point] as Point;
+    const index = 2 + control * 2;
+    changed[index] = clamped[0] - point[0];
+    changed[index + 1] = clamped[1] - point[1];
+    applyResponse(
+      { points: state.polygon.points.map((p, i) => (i === pointIndex ? changed : p)) },
+      'set-bezier-control'
+    );
+    flushSetState();
+    return true;
+  }
+
+  /** Perpendicular offset factor for a new curve: small, so the result reads as a gentle arc. */
+  const CURVE_BULGE = 0.12;
+
+  /** Unit-length outward normal (away from the shape's interior) for the edge `from -> to`. */
+  function outwardNormal(from: Point, to: Point): Point {
+    const pts = state.polygon.points;
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i],
+        b = pts[(i + 1) % pts.length];
+      area += a[0] * b[1] - b[0] * a[1];
+    }
+    const dx = to[0] - from[0],
+      dy = to[1] - from[1];
+    // In y-down coordinates a positive shoelace sum is clockwise on screen, whose outward normal is (dy, -dx).
+    return area >= 0 ? [dy, -dx] : [-dy, dx];
+  }
+
+  function setCurve(pointIndex: number, enabled = true) {
+    const point = state.polygon.points[pointIndex];
+    const next = state.polygon.points[(pointIndex + 1) % state.polygon.points.length];
+    if (
+      !point ||
+      !next ||
+      state.slowState.transitioning ||
+      (state.isOpen && pointIndex === state.polygon.points.length - 1)
+    )
+      return false;
+    if (enabled === (point.length === 6)) return true;
+    const dx = next[0] - point[0],
+      dy = next[1] - point[1];
+    // Bulge outwards so a new curve on a closed shape is convex, never a dent.
+    const [nx, ny] = outwardNormal(point, next);
+    const bulgeX = nx * CURVE_BULGE,
+      bulgeY = ny * CURVE_BULGE;
+    const changed: Point = enabled
+      ? [point[0], point[1], dx / 3 + bulgeX, dy / 3 + bulgeY, (dx * 2) / 3 + bulgeX, (dy * 2) / 3 + bulgeY]
+      : [point[0], point[1]];
+    applyResponse(
+      { points: state.polygon.points.map((p, i) => (i === pointIndex ? changed : p)), selectedPoints: [pointIndex] },
+      'set-curve'
+    );
+    flushSetState();
+    return true;
+  }
+
+  function neighbours(i: number) {
+    const pts = state.polygon.points;
+    const n = pts.length;
+    if (n < 2 || !pts[i]) return null;
+    const prevIndex = (i - 1 + n) % n;
+    const nextIndex = (i + 1) % n;
+    return {
+      prevIndex,
+      nextIndex,
+      hasPrev: state.isOpen ? i > 0 : true,
+      hasNext: state.isOpen ? i < n - 1 : true,
+    };
+  }
+
+  /** Make a single point smooth: handles sit either side of it, along the line between its neighbours. */
+  function setSmoothPoint(i: number, enabled: boolean) {
+    const pts = state.polygon.points;
+    const around = neighbours(i);
+    if (!around) return false;
+    const { prevIndex, nextIndex, hasPrev, hasNext } = around;
+    const p = pts[i];
+    const prev = hasPrev ? pts[prevIndex] : null;
+    const next = hasNext ? pts[nextIndex] : null;
+    const changed = new Map<number, Point>();
+    if (!enabled) {
+      if (hasNext && p.length === 6) changed.set(i, [p[0], p[1]]);
+      if (prev && prev.length === 6) changed.set(prevIndex, [prev[0], prev[1]]);
+    } else {
+      const from = prev || p,
+        to = next || p;
+      let tx = to[0] - from[0],
+        ty = to[1] - from[1];
+      const length = Math.hypot(tx, ty);
+      if (!length) return false;
+      tx /= length;
+      ty /= length;
+      if (next) {
+        const out = distance(p, next) / 3;
+        const dx = next[0] - p[0],
+          dy = next[1] - p[1];
+        const keep = p.length === 6 ? [p[4], p[5]] : [(dx * 2) / 3, (dy * 2) / 3];
+        changed.set(i, [p[0], p[1], tx * out, ty * out, keep[0], keep[1]]);
+      }
+      if (prev) {
+        const inn = distance(prev, p) / 3;
+        const dx = p[0] - prev[0],
+          dy = p[1] - prev[1];
+        const keep = prev.length === 6 ? [prev[2], prev[3]] : [dx / 3, dy / 3];
+        changed.set(prevIndex, [prev[0], prev[1], keep[0], keep[1], dx - tx * inn, dy - ty * inn]);
+      }
+    }
+    if (!changed.size) return true;
+    applyResponse({ points: pts.map((q, idx) => changed.get(idx) || q), selectedPoints: [i] }, 'set-curve');
+    flushSetState();
+    return true;
+  }
+
+  /**
+   * Align the handles either side of each point so the curve flows through it without a kink.
+   * Both handles keep their length. With a single curved side, that handle is lined up with the
+   * straight neighbouring edge. Returns the new points, or null when nothing would change.
+   */
+  function smoothenPoints(indices: number[]): Point[] | null {
+    const work: Point[] = state.polygon.points.map((p) => [...p] as Point);
+    let changed = false;
+    const unit = (x: number, y: number): [number, number] | null => {
+      const l = Math.hypot(x, y);
+      return l > 1e-9 ? [x / l, y / l] : null;
+    };
+    for (const i of Array.from(new Set(indices))) {
+      const around = neighbours(i);
+      if (!around) continue;
+      const { prevIndex, nextIndex, hasPrev, hasNext } = around;
+      const p = work[i];
+      const prev = hasPrev ? work[prevIndex] : null;
+      const next = hasNext ? work[nextIndex] : null;
+      const outCurved = !!next && p.length === 6;
+      const inCurved = !!prev && prev.length === 6;
+      if (!outCurved && !inCurved) continue;
+      // Handle vectors pointing away from the point.
+      const out: [number, number] | null = outCurved ? [p[2]!, p[3]!] : null;
+      const inn: [number, number] | null = inCurved ? [prev!.length === 6 ? prev![4]! + prev![0] - p[0] : 0, prev![5]! + prev![1] - p[1]] : null;
+      const outLen = out ? Math.hypot(out[0], out[1]) : 0;
+      const innLen = inn ? Math.hypot(inn[0], inn[1]) : 0;
+      let tangent: [number, number] | null = null; // direction the outgoing handle should point
+      if (out && inn) {
+        const a = unit(out[0], out[1]);
+        const b = unit(-inn[0], -inn[1]);
+        tangent = a && b ? unit(a[0] + b[0], a[1] + b[1]) : a || b;
+        if (!tangent && next && prev) tangent = unit(next[0] - prev[0], next[1] - prev[1]);
+      } else if (out && prev) {
+        const back = unit(prev[0] - p[0], prev[1] - p[1]);
+        tangent = back ? [-back[0], -back[1]] : null;
+      } else if (inn && next) {
+        tangent = unit(next[0] - p[0], next[1] - p[1]);
+      }
+      if (!tangent) continue;
+      if (out) {
+        const len = outLen || (next ? distance(p, next) / 3 : 0);
+        const nx = tangent[0] * len,
+          ny = tangent[1] * len;
+        if (Math.abs(nx - p[2]!) > 1e-6 || Math.abs(ny - p[3]!) > 1e-6) changed = true;
+        work[i] = [p[0], p[1], nx, ny, p[4]!, p[5]!];
+      }
+      if (inn && prev) {
+        const len = innLen || distance(prev, p) / 3;
+        const hx = p[0] - tangent[0] * len,
+          hy = p[1] - tangent[1] * len;
+        const nx = hx - prev[0],
+          ny = hy - prev[1];
+        if (Math.abs(nx - prev[4]!) > 1e-6 || Math.abs(ny - prev[5]!) > 1e-6) changed = true;
+        work[prevIndex] = [prev[0], prev[1], prev[2]!, prev[3]!, nx, ny];
+      }
+    }
+    return changed ? work : null;
+  }
+
+  /**
+   * Double-click / double-tap at a position. On a point that has curve handles this smoothens it
+   * (lines the handles up). Returns whether anything changed.
+   */
+  function doubleClick(pointer: Point) {
+    if (state.slowState.transitioning || !validPoint(pointer)) return false;
+    const threshold = getModifiers().proximity;
+    let nearest = -1;
+    let best = threshold;
+    state.polygon.points.forEach((p, i) => {
+      const d = Math.hypot(p[0] - pointer[0], p[1] - pointer[1]);
+      if (d <= best) {
+        best = d;
+        nearest = i;
+      }
+    });
+    if (nearest < 0 || !canSmoothen([nearest])) return false;
+    state.selectedPoints = [nearest];
+    setState({ selectedPoints: [nearest] });
+    return smoothen([nearest]);
+  }
+
+  /** True when "smoothen" would change something for this selection. */
+  function canSmoothen(indices: number[]) {
+    return !state.slowState.transitioning && indices.length > 0 && smoothenPoints(indices) !== null;
+  }
+
+  function smoothen(indices: number[] = state.selectedPoints) {
+    if (state.slowState.transitioning) return false;
+    const points = smoothenPoints(indices);
+    if (!points) return false;
+    applyResponse({ points, selectedPoints: [...state.selectedPoints] }, 'smoothen');
+    flushSetState();
+    return true;
+  }
+
+  /** The segment (identified by its first point) selected by two consecutive points, if any. */
+  function segmentFor(indices: number[]): number | null {
+    const n = state.polygon.points.length;
+    const [a, b] = indices;
+    const valid = (from: number) => !state.isOpen || from < n - 1;
+    if ((a + 1) % n === b && valid(a)) return a;
+    if ((b + 1) % n === a && valid(b)) return b;
+    return null;
+  }
+
+  /**
+   * Curve selection semantics: one point becomes smooth (handles either side of it);
+   * two consecutive points curve the segment between them.
+   */
+  function curveState(indices: number[]) {
+    const none = { available: false, curved: false, anyCurved: false };
+    const unique = Array.from(new Set(indices));
+    const pts = state.polygon.points;
+    if (state.slowState.transitioning) return none;
+    if (unique.length === 1) {
+      const around = neighbours(unique[0]);
+      if (!around) return none;
+      const flags: boolean[] = [];
+      if (around.hasNext) flags.push(pts[unique[0]].length === 6);
+      if (around.hasPrev) flags.push(pts[around.prevIndex].length === 6);
+      return { available: flags.length > 0, curved: flags.every(Boolean), anyCurved: flags.some(Boolean) };
+    }
+    if (unique.length === 2) {
+      const from = segmentFor(unique);
+      if (from === null) return none;
+      const curved = pts[from].length === 6;
+      return { available: true, curved, anyCurved: curved };
+    }
+    return none;
+  }
+
+  function setCurveAt(indices: number[], enabled = true) {
+    if (state.slowState.transitioning) return false;
+    const unique = Array.from(new Set(indices));
+    if (unique.length === 1) return setSmoothPoint(unique[0], enabled);
+    if (unique.length === 2) {
+      const from = segmentFor(unique);
+      if (from !== null) {
+        const ok = setCurve(from, enabled);
+        if (ok) {
+          state.selectedPoints = unique;
+          setState({ selectedPoints: unique });
+        }
+        return ok;
+      }
+    }
+    return false;
+  }
+
+  function moveSelectedPointTo(point: Point) {
+    if (!validPoint(point) || state.selectedPoints.length !== 1 || state.slowState.transitioning) return false;
+    const i = state.selectedPoints[0];
+    const anchor = state.polygon.points[i];
+    if (!anchor) return false;
+    const target = resolvePoint(point, state, { disableSnap: getModifiers().Shift });
+    state.activeHandle = target;
+    return nudge(target[0] - anchor[0], target[1] - anchor[1]);
   }
 
   function label(type: string | null) {
     if (!type) return '';
     const intent = intentMap[type];
     if (!intent || !intent.modifiers) {
-      return intent.label || '';
+      return intent?.label || '';
     }
 
     if (state.slowState.modifiers.Shift && intent.modifiers.Shift) {
@@ -1251,12 +1735,12 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
 
   // Tools
   // Tool management functions
-  function setTool(tool: ValidTools) {
+  function setTool(tool: ValidTools, initialize = false) {
     if (state.slowState.isToolSwitchingLocked) {
       return;
     }
     // Skip if already on this tool
-    if (state.slowState.currentTool === tool) {
+    if (!initialize && state.slowState.currentTool === tool) {
       return;
     }
 
@@ -1273,15 +1757,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       lastCreationTool = tool;
     }
 
-    // Cancel any ongoing transition when switching tools
-    if (state.slowState.transitioning) {
-      state.transitionPoints = null;
-      state.transitionBoundingBox = null;
-      state.transitionDraw = [];
-      state.line = null;
-      state.lineBox = null;
-      setState({ transitioning: false });
-    }
+    if (state.slowState.transitioning || state.boxPending || pointerState.isPressed) cancelGesture('tool-changed');
+    clearSnapState(state);
 
     // Get valid intents for this tool (for UI hints)
     const validIntentKeys = getValidIntentsForTool(tool);
@@ -1295,7 +1772,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     switch (tool) {
       case 'pointer':
         // If switching from another tool and we have a full shape, select all points
-        if (state.polygon.points.length > 0 && !isOpen && selectedPoints.length === 0) {
+        if (!initialize && state.polygon.points.length > 0 && !isOpen && selectedPoints.length === 0) {
           selectedPoints = state.polygon.points.map((_, idx) => idx);
         }
         break;
@@ -1393,6 +1870,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
 
     // Update UI with current valid intents
     updateCurrentIntent();
+    updateCursor();
   }
 
   /**
@@ -1436,7 +1914,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     undo,
     redo,
     get canUndo() {
-      return internals.undoStackPointer > -1;
+      return internals.undoStackPointer > 0;
     },
     get canRedo() {
       return internals.undoStackPointer < internals.undoStack.length - 1;
@@ -1454,8 +1932,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       setState({ canDelete });
     },
 
-    setCanDeselect(canDeselect: boolean) {
-      selectAllPoints();
+    /** Allow clicking empty space to clear the selection. Pass `selectAll = false` to leave the selection alone. */
+    setCanDeselect(canDeselect: boolean, selectAll = true) {
+      if (selectAll) selectAllPoints();
       setState({ canDeselect });
     },
 
@@ -1548,6 +2027,12 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     disableLines: () => setState({ snapToLines: false }),
     toggleLines: () => setState({ snapToLines: !state.slowState.snapToLines }),
 
+    // Curve (Bézier edge) snapping
+    curvesEnabled: () => state.slowState.snapToCurves,
+    enableCurves: () => setState({ snapToCurves: true }),
+    disableCurves: () => setState({ snapToCurves: false }),
+    toggleCurves: () => setState({ snapToCurves: !state.slowState.snapToCurves }),
+
     // Intersection snapping
     intersectionsEnabled: () => state.slowState.snapToIntersections,
     enableIntersections: () => setState({ snapToIntersections: true }),
@@ -1567,8 +2052,18 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     toggleParallel: () => setState({ snapToParallel: !state.slowState.snapToParallel }),
 
     // Threshold control
-    getThreshold: () => state.snapThreshold * state.slowState.modifiers.proximity,
+    getThreshold: () => state.snapThreshold,
+    getWorldThreshold: () => state.snapThreshold * state.scale,
+    setSources: (sources: InputShape[]) => {
+      state.snapSources = sources.map((s) => ({ ...s, points: s.points.map((p) => [...p] as Point) }));
+      clearSnapState(state);
+    },
+    setGrid: (grid: SnapGrid) => {
+      state.snapGrid = grid;
+      clearSnapState(state);
+    },
     setThreshold: (threshold: number) => {
+      if (!Number.isFinite(threshold)) return;
       state.snapThreshold = Math.max(5, Math.min(50, threshold)); // Clamp between 5-50 pixels
     },
 
@@ -1588,7 +2083,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   }
 
   // Initialize tool system
-  setTool(initialTool);
+  setTool(initialTool, true);
+  setPointerType(input?.pointerType || 'mouse');
+  internals.undoStack = [snapshot()];
+  internals.undoStackPointer = 0;
+  updateHistoryState();
 
   return {
     state,
@@ -1599,6 +2098,26 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     history,
     key,
     setScale,
+    setPointerType,
+    setBoxPlacement,
+    setDragOffset: (offset: [number, number]) => {
+      if (offset.every(Number.isFinite)) dragOffset = [...offset];
+    },
+    cancelGesture,
+    finishShape,
+    finishOpenShape: finishShape,
+    undoLastPoint,
+    addPointAt,
+    moveSelectedPointTo,
+    setBezierControl,
+    setCurve,
+    setCurveAt,
+    smoothen,
+    canSmoothen,
+    doubleClick,
+    curveState,
+    setPointerOverride,
+    nudge,
     clock,
     pointer,
     blur,

@@ -20,7 +20,8 @@ export const nudgeRight: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [p[0] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1), p[1]];
+        const x = p[0] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1);
+        return p.length === 6 ? [x, p[1], p[2], p[3], p[4], p[5]] : [x, p[1]];
       }
       return p;
     });
@@ -45,7 +46,8 @@ export const nudgeLeft: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
-        return [Math.max(0, p[0] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1)), p[1]];
+        const x = p[0] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1);
+        return p.length === 6 ? [x, p[1], p[2], p[3], p[4], p[5]] : [x, p[1]];
       }
       return p;
     });
@@ -71,7 +73,7 @@ export const nudgeUp: ActionIntent = {
     const newPoints: Point[] = points.map((p, i) => {
       if (selected.includes(i)) {
         const x = p[0];
-        const y = Math.max(0, p[1] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1));
+        const y = p[1] - (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1);
         if (p.length === 6) {
           return [x, y, p[2], p[3], p[4], p[5]];
         }
@@ -100,7 +102,7 @@ export const nudgeDown: ActionIntent = {
     const selected = state.selectedPoints;
     const newPoints: Point[] = points.map((p, i) => {
       const x = p[0];
-      const y = Math.max(0, p[1] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1));
+      const y = p[1] + (modifiers.Shift ? NUDGE_AMOUNT_MODIFIER * dist : 1);
       if (selected.includes(i)) {
         if (p.length === 6) {
           return [x, y, p[2], p[3], p[4], p[5]];

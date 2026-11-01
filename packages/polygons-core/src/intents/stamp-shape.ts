@@ -1,118 +1,60 @@
-import { type Point, type Polygon, updateBoundingBox } from '../polygon';
+import type { Point } from '../polygon';
 import { square } from '../shapes';
-import type { Modifiers, RenderState, TransitionIntent } from '../types';
+import { resolvePoint } from '../snap-utils';
+import type { TransitionIntent } from '../types';
 
 export const stampShape: TransitionIntent = {
   type: 'stamp-shape',
   label: 'Stamp shape',
   tools: ['stamp', 'box'],
-  modifiers: {
-    Shift: 'Maintain aspect ratio',
+  modifiers: { Shift: 'Maintain aspect ratio' },
+  isValid(_pointers, state) {
+    return !state.polygon.points.length || state.slowState.canDelete;
   },
-
-  isValid(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    if (state.polygon.points.length && !state.slowState.canDelete) {
-      return false;
-    }
-    return true;
-  },
-
-  start(pointers: Point[], state: RenderState, modifiers: Modifiers) {
-    const pointer = pointers[0];
-    // Check the selected shape, rescale and insert at the cursor position (small) in transition points.
-    const stamp = state.slowState.selectedStamp || square;
-
-    if (pointer) {
-      // No rounding, fit it into a 32x32 box, starting from the pointer.
-      const x = pointer[0];
-      const y = pointer[1];
-      const newPoints: Point[] = [];
-
-      const stampX = Math.min(...stamp.points.map((p) => p[0]));
-      const stampY = Math.min(...stamp.points.map((p) => p[1]));
-      const stampWidth = Math.max(...stamp.points.map((p) => p[0])) - stampX;
-      const stampHeight = Math.max(...stamp.points.map((p) => p[1])) - stampY;
-
-      let ratio = stampWidth / 32;
-      if (stampHeight / 32 > ratio) {
-        ratio = stampHeight / 32;
-      }
-      const selectedPoints: number[] = [];
-      let i = 0;
-      for (const point of stamp.points) {
-        selectedPoints.push(i);
-        newPoints.push([x + (point[0] - stampX) / ratio, y + (point[1] - stampY) / ratio]);
-        i++;
-      }
-
-      state.transitionPoints = newPoints;
-      return {
-        isOpen: false,
-        selectedPoints,
-        points: newPoints,
-      };
-    }
-  },
-
-  transition(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+  transition(pointers, state, modifiers) {
     if (!state.transitionOrigin) return;
-
-    const box = state.polygon.boundingBox!;
-    const origin: Point = [box.x, box.y];
-    const start = state.transitionOrigin || pointers[0];
-    const [x, y] = pointers[0];
-
-    const x1 = state.transitionOrigin[0];
-    const y1 = state.transitionOrigin[1];
-
-    const x2 = pointers[0][0];
-    const y2 = pointers[0][1];
-
-    let dx = x2 - x1 - 32;
-    let dy = y2 - y1 - 32;
-
+    const stamp = state.slowState.selectedStamp || square;
+    const xs = stamp.points.map((p) => p[0]),
+      ys = stamp.points.map((p) => p[1]);
+    const left = Math.min(...xs),
+      top = Math.min(...ys);
+    const width = Math.max(...xs) - left,
+      height = Math.max(...ys) - top;
+    if (!width || !height) return;
+    const origin = resolvePoint(state.transitionOrigin, state, { disableSnap: modifiers.Shift });
+    const target = resolvePoint(pointers[0], state, { disableSnap: modifiers.Shift });
+    let dx = target[0] - origin[0],
+      dy = target[1] - origin[1];
     if (modifiers.Shift || state.slowState.fixedAspectRatio) {
-      // Maintain aspect ratio.
-      const aspect = box.width / box.height;
-      if (Math.abs(box.width / dx) > Math.abs(box.height / dy)) {
-        dy = dx / aspect;
-      } else {
-        dx = dy * aspect;
-      }
+      const aspect = width / height;
+      if (Math.abs(dx) > Math.abs(dy * aspect)) dy = (Math.sign(dy) || 1) * Math.abs(dx / aspect);
+      else dx = (Math.sign(dx) || 1) * Math.abs(dy * aspect);
     }
-
-    const scaleX = (box.width + dx) / box.width;
-    const scaleY = (box.height + dy) / box.height;
-
-    const newPoints: Point[] = [];
-    for (const point of state.polygon.points) {
-      // minus origin
-      const x1 = point[0] - origin[0];
-      const y1 = point[1] - origin[1];
-      // scale
-      const x2 = x1 * scaleX;
-      const y2 = y1 * scaleY;
-      // add origin
-      const x3 = x2 + origin[0];
-      const y3 = y2 + origin[1];
-
-      if (point.length === 6) {
-        newPoints.push([x3, y3, point[2], point[3], point[4], point[5]]);
-        continue;
-      }
-
-      newPoints.push([x3, y3]);
+    const bounds = state.slowState.bounds;
+    if (bounds && (modifiers.Shift || state.slowState.fixedAspectRatio)) {
+      const availableX = dx < 0 ? origin[0] - bounds.x : bounds.x + bounds.width - origin[0];
+      const availableY = dy < 0 ? origin[1] - bounds.y : bounds.y + bounds.height - origin[1];
+      const fit = Math.min(1, dx ? availableX / Math.abs(dx) : 1, dy ? availableY / Math.abs(dy) : 1);
+      dx *= fit;
+      dy *= fit;
     }
-    state.transitionPoints = newPoints;
-    const poly: Polygon = { points: newPoints, iedges: null, boundingBox: null, bezierLines: [], isBezier: false };
-    updateBoundingBox(poly);
-    state.transitionBoundingBox = poly.boundingBox;
+    state.activeHandle = [origin[0] + dx, origin[1] + dy];
+    state.transitionPoints = stamp.points.map((p) => {
+      const x = origin[0] + ((p[0] - left) * dx) / width;
+      const y = origin[1] + ((p[1] - top) * dy) / height;
+      return (
+        p.length === 6
+          ? [x, y, (p[2] * dx) / width, (p[3] * dy) / height, (p[4] * dx) / width, (p[5] * dy) / height]
+          : [x, y]
+      ) as Point;
+    });
   },
-
-  commit(pointers: Point[], state: RenderState, modifiers: Modifiers) {
+  commit(_pointers, state) {
+    if (!state.transitionPoints) return;
     return {
       isOpen: false,
-      points: state.transitionPoints!,
+      points: state.transitionPoints,
+      selectedPoints: state.transitionPoints.map((_, i) => i),
       tool: 'pointer',
     };
   },
