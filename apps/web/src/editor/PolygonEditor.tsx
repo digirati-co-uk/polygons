@@ -391,11 +391,19 @@ export function PolygonEditor({
           blocked.current = contacts.current.size > 0;
           run(() => helper.cancelGesture('pointercancel'));
         }}
-        onLostPointerCapture={() => {
-          if (helper.state.slowState.transitioning) run(() => helper.cancelGesture('capture-lost'));
+        onLostPointerCapture={(event) => {
+          // A capture can be lost before movement crosses the drag threshold.
+          // Normal releases already removed the contact and may retain a tap-box draft.
+          if (contacts.current.delete(event.pointerId)) {
+            blocked.current = contacts.current.size > 0;
+            run(() => helper.cancelGesture('capture-lost'));
+          }
         }}
         onBlur={() => {
-          if (helper.state.slowState.transitioning) run(() => helper.cancelGesture('blur'));
+          if (contacts.current.size || helper.state.slowState.transitioning) {
+            blocked.current = contacts.current.size > 0;
+            run(() => helper.cancelGesture('blur'));
+          }
         }}
         onPointerEnter={() => {
           hovering.current = true;

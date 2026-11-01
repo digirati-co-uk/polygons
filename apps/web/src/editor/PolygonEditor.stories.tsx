@@ -156,6 +156,28 @@ export const CancelCreation: Story = {
     await expect(read(c).points).toEqual([]);
   },
 };
+export const LostCaptureBeforeDrag: Story = {
+  args: { tool: 'box' },
+  play: async ({ canvasElement: c }) => {
+    send(c, 'pointerDown', [100, 100]);
+    fireEvent.lostPointerCapture(surface(c), { pointerId: 1 });
+    send(c, 'pointerMove', [320, 240]);
+    send(c, 'pointerUp', [320, 240]);
+    await expect(read(c).points).toEqual([]);
+    await drag(c, [100, 100], [320, 240]);
+    await expect(read(c).points).toEqual(rectangle.points);
+  },
+};
+export const BlurBeforeDrag: Story = {
+  args: { tool: 'box' },
+  play: async ({ canvasElement: c }) => {
+    send(c, 'pointerDown', [100, 100]);
+    surface(c).blur();
+    send(c, 'pointerMove', [320, 240]);
+    send(c, 'pointerUp', [320, 240]);
+    await expect(read(c).points).toEqual([]);
+  },
+};
 export const SecondFingerCancels: Story = {
   args: { shape: triangle, tool: 'pointer', touch: true, width: 360 },
   play: async ({ canvasElement: c }) => {
