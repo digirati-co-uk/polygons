@@ -13,7 +13,7 @@ export const selectPoint: ActionIntent = {
   isValid(pointers: Point[], state: RenderState, modifiers: Modifiers): boolean {
     const threshold = modifiers.proximity;
     let skipIndex = -1;
-    if (state.selectedPoints.length === 1) {
+    if (state.isOpen && ['pen', 'line'].includes(state.slowState.currentTool) && state.selectedPoints.length === 1) {
       const selected = state.selectedPoints[0];
       if (selected === 0) {
         skipIndex = state.polygon.points.length - 1;

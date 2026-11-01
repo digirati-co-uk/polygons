@@ -51,7 +51,7 @@ export const selectMultiplePoints: TransitionIntent = {
           point[1] >= state.selectionBox.y &&
           point[1] <= state.selectionBox.y + state.selectionBox.height
         ) {
-          pointsInsideIdx.push(i);
+          if (!pointsInsideIdx.includes(i)) pointsInsideIdx.push(i);
         }
       }
 
