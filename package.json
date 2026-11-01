@@ -12,7 +12,8 @@
     "test:e2e": "pnpm --filter web test:e2e",
     "test:iiif": "pnpm --filter web test:iiif",
     "docs:sync": "node scripts/sync-readme.mjs",
-    "docs:check": "node scripts/sync-readme.mjs --check"
+    "docs:check": "node scripts/sync-readme.mjs --check",
+    "test:release": "node --test scripts/release.test.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.5",
