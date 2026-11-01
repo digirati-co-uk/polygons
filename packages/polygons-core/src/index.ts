@@ -520,15 +520,15 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   }
 
   function undo() {
-    if (internals.undoStackPointer <= 0) return;
     cancelGesture('undo');
+    if (internals.undoStackPointer <= 0) return;
     applyUndo(internals.undoStack[--internals.undoStackPointer]);
     updateHistoryState();
   }
 
   function redo() {
-    if (internals.undoStackPointer >= internals.undoStack.length - 1) return;
     cancelGesture('redo');
+    if (internals.undoStackPointer >= internals.undoStack.length - 1) return;
     applyUndo(internals.undoStack[++internals.undoStackPointer]);
     updateHistoryState();
   }
@@ -949,6 +949,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
           );
           return true;
         }
+        // A key edit must not leave a drag response that can overwrite it on release.
+        const selectedPoints = state.selectedPoints;
+        cancelGesture('key-action');
+        setState({ selectedPoints });
         commit(keyIntent);
         return true;
       }
@@ -1046,6 +1050,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   const key = {
     down(inputKey: string) {
       const key = keyboardShortcutMapping[inputKey] || inputKey;
+      if (key === 'Escape' && (pointerState.isPressed || state.slowState.transitioning || state.boxPending)) {
+        cancelGesture('escape');
+        return true;
+      }
       if (key === 'Shift' || key === 'Alt' || key === 'Meta') {
         modifiers.set(key);
         return true;
@@ -1179,6 +1187,8 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   }
 
   function cancelGesture(reason = 'cancelled') {
+    // Also invalidates a response being delivered to synchronous event listeners.
+    internals.revision++;
     const active = pointerState.isPressed || state.slowState.transitioning || !!state.boxPending;
     const type = state.slowState.transitionIntentType;
     if (gestureBaseline) {
