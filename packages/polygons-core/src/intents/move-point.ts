@@ -1,5 +1,6 @@
 import { closestVertex, reattachHandles, type Point } from '../polygon';
-import { resolvePoint } from '../snap-utils';
+import { clampXYToBounds } from '../math';
+import { clearSnapState, resolvePoint } from '../snap-utils';
 import type { Modifiers, RenderState, TransitionIntent } from '../types';
 import { boundingBoxCorners } from './bounding-box-corners';
 
@@ -91,9 +92,19 @@ export const movePoint: TransitionIntent = {
       else dx = 0;
     }
     const target = resolvePoint([anchor[0] + dx, anchor[1] + dy], state, { disableSnap: modifiers.Shift });
-    state.activeHandle = target;
     dx = target[0] - anchor[0];
     dy = target[1] - anchor[1];
+    const selected = points.filter((_, i) => selectedPoints.includes(i));
+    const xs = selected.map((p) => p[0]);
+    const ys = selected.map((p) => p[1]);
+    const [boundedX, boundedY] = clampXYToBounds(dx, dy, {
+      x: Math.min(...xs), y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
+    }, state.slowState.bounds);
+    if (boundedX !== dx || boundedY !== dy) clearSnapState(state);
+    dx = boundedX;
+    dy = boundedY;
+    state.activeHandle = [anchor[0] + dx, anchor[1] + dy];
     const transitionPoints: Point[] = [];
 
     for (let i = 0; i < points.length; i++) {

@@ -228,8 +228,8 @@ export const boundingBoxCorners: TransitionIntent = {
     if (modifiers.Shift || state.slowState.fixedAspectRatio) {
       const vx = sx * ow;
       const vy = sy * oh;
-      const px = mx - origin[0];
-      const py = my - origin[1];
+      const px = target[0] - origin[0];
+      const py = target[1] - origin[1];
 
       const denom = vx * vx + vy * vy;
       let t = denom > 0 ? (px * vx + py * vy) / denom : 1;
