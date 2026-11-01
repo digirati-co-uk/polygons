@@ -110,7 +110,7 @@ export interface SlowState {
   snapToPoints: boolean;
   snapToLines: boolean;
   /** Snap to the curved (Bézier) edges of shapes, not just straight ones. On by default. */
-  snapToCurves: boolean;
+  snapToCurves?: boolean;
   snapToIntersections: boolean;
   snapToGrid: boolean;
   snapToParallel: boolean;

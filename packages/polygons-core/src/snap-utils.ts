@@ -125,7 +125,7 @@ export function findAllSnapTargets(
     // Straight edges follow "lines"; curved edges follow "curves" (and are snapped as the curve, not its chord).
     for (const [i, j] of edges) {
       if (points[i].length === 6) {
-        if (curvesOnly || state.slowState.snapToCurves)
+        if (curvesOnly || state.slowState.snapToCurves !== false)
           add('line', closestPointOnSegment(pointer, points, i), { lineIndex: i, polygon });
       } else if (!curvesOnly && state.slowState.snapToLines) {
         add('line', distancePointToLine(pointer, points[i], points[j]).closestPoint, { lineIndex: i, polygon });

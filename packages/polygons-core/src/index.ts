@@ -2028,10 +2028,10 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     toggleLines: () => setState({ snapToLines: !state.slowState.snapToLines }),
 
     // Curve (Bézier edge) snapping
-    curvesEnabled: () => state.slowState.snapToCurves,
+    curvesEnabled: () => state.slowState.snapToCurves !== false,
     enableCurves: () => setState({ snapToCurves: true }),
     disableCurves: () => setState({ snapToCurves: false }),
-    toggleCurves: () => setState({ snapToCurves: !state.slowState.snapToCurves }),
+    toggleCurves: () => setState({ snapToCurves: state.slowState.snapToCurves === false }),
 
     // Intersection snapping
     intersectionsEnabled: () => state.slowState.snapToIntersections,
