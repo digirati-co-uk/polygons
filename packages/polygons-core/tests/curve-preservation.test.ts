@@ -20,3 +20,16 @@ test('clicking to stamp scales its curve controls with its anchors', () => {
   h.pointerUp();
   expect(h.state.polygon.points[0]).toEqual([180, 180, 10, -10, 30, -10]);
 });
+
+test('clicking a curved edge subdivides its controls without changing the curve', () => {
+  const h = createHelper({ tool: 'pen', open: false,
+    points: [[100, 100, 40, -20, 160, -20], [300, 100], [200, 300]],
+  }, () => {});
+  h.pointerDown([200, 85]);
+  h.pointerUp();
+  expect(h.state.polygon.points).toEqual([
+    [100, 100, 20, -10, 60, -15],
+    [200, 85, 40, 0, 80, 5],
+    [300, 100], [200, 300],
+  ]);
+});

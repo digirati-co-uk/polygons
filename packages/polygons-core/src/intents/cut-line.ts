@@ -43,6 +43,13 @@ export const cutLine: ActionIntent = {
       };
     }
 
+    // Use the same subdivision as dragging a point out of a curved edge.
+    // Simply inserting an anchor would leave the old controls on half the curve.
+    if (state.polygon.points[state.closestLineIndex]?.length === 6) {
+      splitLine.transition(pointers, state, { ...modifiers, Alt: false });
+      return splitLine.commit(pointers, state, modifiers);
+    }
+
     // Otherwise we want to insert a new point.
     const points = state.polygon.points;
     const newPoints: Point[] = [];
