@@ -119,9 +119,21 @@ helper.snap.enableGrid();
 
 The shared resolver supports vertices, line segments, intersections, a grid, and the existing horizontal/vertical alignment behavior named `parallel`. It does not claim arbitrary edge-angle parallel snapping. External snap sources allow hosts to supply other annotations or canvas boundaries. Their geometry is copied; replace the sources when it changes. Existing exported utility calls with an explicit threshold continue to interpret that argument as world units.
 
-Open shapes do not have a phantom closing edge. Moving vertices exclude their incident edges, split-line excludes its source edge, and exact matches remain targets. Handle snapping compensates for the grab offset. Shift disables snapping while retaining axis constraints. Disabling snapping, cancellation, tool changes, and shape replacement clear the active guides. Intersection searches are cached until geometry changes.
+Open shapes do not have a phantom closing edge. Moving vertices exclude their incident edges, split-line excludes its source edge, and exact matches remain targets. Handle snapping compensates for the grab offset. Shift limits snapping to curved edges, including when the global snap toggle is off. Pen continuation keeps its Shift angle constraint; moving points also retain their axis constraint before resolving curve targets. Disabling snapping, cancellation, tool changes, and shape replacement clear the active guides. Intersection searches are cached until geometry changes.
 
-Bounds constrain committed anchors and group translation/nudge. Bezier control offsets survive movement/nudge and transform with scaling/rotation. Bézier controls have draggable amber handles and control arms. `helper.setCurve(pointIndex, enabled)` converts an outgoing segment between straight and cubic form; `helper.setBezierControl(pointIndex, control, worldPoint)` sets control 0 or 1 in world coordinates. These are additive commands with history support. Control dragging is a normal draft/commit/cancel transaction. Curve hit testing and line snapping still use anchor segments; snapping to the curved perimeter is not implemented.
+Bounds constrain committed anchors and group translation/nudge. Bezier control offsets survive movement/nudge and transform with scaling/rotation. Bézier controls have draggable amber handles and control arms. `helper.setCurve(pointIndex, enabled)` converts an outgoing segment between straight and cubic form; `helper.setBezierControl(pointIndex, control, worldPoint)` sets control 0 or 1 in world coordinates. These are additive commands with history support. Control dragging is a normal draft/commit/cancel transaction. Curve hit testing and snapping approximate cubic segments with 32 straight pieces. Clicking or dragging a curved edge subdivides its controls. Intersection guides still use anchor segments rather than exact curve intersections.
+
+## Consumer compatibility checks
+
+After building, compare a consumer's installed types with the local declarations without modifying its dependencies:
+
+```sh
+node scripts/check-consumer-types.cjs ../react-iiif-vault/tsconfig.json
+node scripts/check-consumer-types.cjs ../iiif-manifest-editor/packages/editors/tsconfig.source.json
+node scripts/check-consumer-types.cjs ../../stephenwf/theseus-workspace/packages/theseus-viewer/tsconfig.json
+```
+
+This reports existing diagnostics separately and fails if the local package introduces new ones. The example's `legacy-api.typecheck.ts` also checks legacy event handlers, state literals, and `customSetState` merges. See [the review record](REVIEW.md) for the runtime suites exercised against the local package.
 
 ## Release
 
