@@ -11,7 +11,11 @@ export function legacyApiTypecheck(helper: ReturnType<typeof createHelper>, lega
   helper.clock.step(0);
   helper.setState(legacyState);
   const input: Parameters<typeof createHelper>[0] = {
-    customSetState: (_partial: Partial<RenderState>) => {},
+    customSetState: (partial: Partial<RenderState>) => {
+      // Vault's store merges the legacy callback into its slow state.
+      const merged: SlowState = { ...legacyState, ...partial };
+      helper.setState(merged);
+    },
   };
   return { down, up, input };
 }

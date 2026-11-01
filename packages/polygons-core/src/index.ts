@@ -296,7 +296,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     snapPoint: null,
     rawPointer: null,
     activeHandle: null,
-    boxPending: null,
+    boxOrigin: null,
   };
 
   // This is state held internally to the helper.
@@ -377,7 +377,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     calculateLineBox();
     updateIsRectangle();
     if (!state.slowState.snapEnabled || getModifiers().Shift) clearSnapState(state);
-    if (state.boxPending && state.pointer) previewTapBox();
+    if (state.boxOrigin && state.pointer) previewTapBox();
     updatePlacementPreview();
     updateCursor();
   }
@@ -408,7 +408,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     const stamp =
       ['box', 'stamp'].includes(tool) &&
       (!state.polygon.points.length || state.slowState.transitionIntentType === 'stamp-shape');
-    if (placement || stamp || state.boxPending) {
+    if (placement || stamp || state.boxOrigin) {
       state.previewPoint = state.line?.[1] || resolvePoint(state.pointer, state, { disableSnap: getModifiers().Shift });
     }
   }
@@ -1050,7 +1050,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   const key = {
     down(inputKey: string) {
       const key = keyboardShortcutMapping[inputKey] || inputKey;
-      if (key === 'Escape' && (pointerState.isPressed || state.slowState.transitioning || state.boxPending)) {
+      if (key === 'Escape' && (pointerState.isPressed || state.slowState.transitioning || state.boxOrigin)) {
         cancelGesture('escape');
         return true;
       }
@@ -1175,7 +1175,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     state.activeHandle = null;
     state.activeBezierControl = null;
     state.previewPoint = null;
-    state.boxPending = null;
+    state.boxOrigin = null;
     clearSnapState(state);
     setState({
       transitioning: false,
@@ -1189,7 +1189,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   function cancelGesture(reason = 'cancelled') {
     // Also invalidates a response being delivered to synchronous event listeners.
     internals.revision++;
-    const active = pointerState.isPressed || state.slowState.transitioning || !!state.boxPending;
+    const active = pointerState.isPressed || state.slowState.transitioning || !!state.boxOrigin;
     const type = state.slowState.transitionIntentType;
     if (gestureBaseline) {
       setState({ selectedPoints: gestureBaseline.selectedPoints });
@@ -1221,7 +1221,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     if (blockedByMultiTouch || !validPoint(pointers[0])) return;
     state.rawPointer = pointers[0];
     state.pointer = pointerOverride || pointers[0];
-    if (state.boxPending) {
+    if (state.boxOrigin) {
       previewTapBox();
       return;
     }
@@ -1295,11 +1295,11 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     }
     gestureBaseline = null;
     // Keep a pending two-tap box between presses.
-    const pending = state.boxPending;
+    const pending = state.boxOrigin;
     const preview = pending ? state.transitionPoints : null;
     clearGestureState();
     if (pending) {
-      state.boxPending = pending;
+      state.boxOrigin = pending;
       state.transitionPoints = preview;
       setState({ boxPending: true });
     }
@@ -1345,9 +1345,9 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
   }
 
   function previewTapBox() {
-    if (!state.boxPending || !state.pointer) return;
+    if (!state.boxOrigin || !state.pointer) return;
     const point = resolvePoint(state.pointer, state, { disableSnap: getModifiers().Shift });
-    state.transitionPoints = tapBoxPoints(state.boxPending, point, state);
+    state.transitionPoints = tapBoxPoints(state.boxOrigin, point, state);
     state.activeHandle = point;
   }
 
@@ -1355,7 +1355,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
     if (!tapBoxIntent.isValid([state.pointer!], state, getModifiers())) return;
     const resp = tapBoxIntent.commit([state.pointer!], state, getModifiers());
     if (resp) applyResponse(resp, 'tap-box');
-    setState({ boxPending: !!state.boxPending });
+    setState({ boxPending: !!state.boxOrigin });
     previewTapBox();
   }
 
@@ -1767,7 +1767,7 @@ export function createHelper(input: CreateHelperInput | null, onSave: (input: On
       lastCreationTool = tool;
     }
 
-    if (state.slowState.transitioning || state.boxPending || pointerState.isPressed) cancelGesture('tool-changed');
+    if (state.slowState.transitioning || state.boxOrigin || pointerState.isPressed) cancelGesture('tool-changed');
     clearSnapState(state);
 
     // Get valid intents for this tool (for UI hints)

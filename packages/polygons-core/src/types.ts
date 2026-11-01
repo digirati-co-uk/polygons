@@ -68,7 +68,7 @@ export interface RenderState {
   splitBend?: boolean;
   activeBezierControl?: { pointIndex: number; control: 0 | 1 } | null;
   activeHandle?: Point | null;
-  boxPending?: Point | null;
+  boxOrigin?: Point | null;
   snapSources?: InputShape[];
   snapGrid?: SnapGrid;
 }

@@ -23,14 +23,14 @@ export const tapBox: ActionIntent = {
   },
   commit(pointers, state, modifiers) {
     const point = resolvePoint(pointers[0], state, { disableSnap: modifiers.Shift });
-    if (!state.boxPending) {
-      state.boxPending = point;
+    if (!state.boxOrigin) {
+      state.boxOrigin = point;
       return;
     }
-    const points = tapBoxPoints(state.boxPending, point, state);
+    const points = tapBoxPoints(state.boxOrigin, point, state);
     if (Math.abs(points[2][0] - points[0][0]) < state.scale || Math.abs(points[2][1] - points[0][1]) < state.scale)
       return;
-    state.boxPending = null;
+    state.boxOrigin = null;
     return { points, isOpen: false, selectedPoints: [0, 1, 2, 3], tool: 'pointer' };
   },
 };

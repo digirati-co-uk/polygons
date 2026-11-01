@@ -389,7 +389,7 @@ describe('touch and commands', () => {
     h.pointerDown([100, 100]);
     h.pointerUp();
     h.cancelGesture();
-    expect(h.state.boxPending).toBeNull();
+    expect(h.state.boxOrigin).toBeNull();
     expect(h.state.transitionPoints).toBeNull();
   });
   test('reticle commands add at supplied positions and finish explicitly', () => {
