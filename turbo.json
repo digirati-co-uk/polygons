@@ -1,10 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local"],
+  "globalDependencies": ["**/.env.*local", "README.md", "scripts/sync-readme.mjs"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "npm/index.*"]
+      "outputs": ["dist/**", "npm/index.*", "npm/README.md"]
     },
     "lint": {},
     "dev": {

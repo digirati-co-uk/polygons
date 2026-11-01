@@ -10,7 +10,8 @@
     "index.d.cts",
     "index.d.ts",
     "index.js",
-    "index.cjs"
+    "index.cjs",
+    "README.md"
   ],
   "exports": {
     ".": {
@@ -25,7 +26,7 @@
     }
   },
   "scripts": {
-    "prepack": "tsup"
+    "prepack": "node ../../../scripts/sync-readme.mjs && tsup"
   },
   "private": false,
   "publishConfig": {
@@ -34,5 +35,25 @@
   "devDependencies": {
     "contours.ts": "^0.2.2",
     "tsup": "^8.5.0"
-  }
+  },
+  "types": "./index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digirati-co-uk/polygons.git",
+    "directory": "packages/polygons-core/npm"
+  },
+  "homepage": "https://github.com/digirati-co-uk/polygons#readme",
+  "bugs": {
+    "url": "https://github.com/digirati-co-uk/polygons/issues"
+  },
+  "keywords": [
+    "polygon",
+    "editor",
+    "headless",
+    "svg",
+    "bezier",
+    "annotations",
+    "iiif",
+    "typescript"
+  ]
 }
