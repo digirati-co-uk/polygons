@@ -1,4 +1,5 @@
 import { distance } from '../math';
+import type { Point } from '../polygon';
 import type { ActionIntent } from '../types';
 
 export const closeShape: ActionIntent = {
@@ -44,7 +45,16 @@ export const closeShape: ActionIntent = {
       // We need to reverse the points
       return {
         selectedPoints: [],
-        points: state.polygon.points.slice(0).reverse(),
+        points: state.polygon.points.slice().reverse().map((point, i): Point => {
+          // Reversing a segment swaps its controls and moves their relative origin
+          // to the other endpoint. The newly closing segment has no controls.
+          const previous = state.polygon.points[state.polygon.points.length - 2 - i];
+          return previous?.length === 6
+            ? [point[0], point[1],
+                previous[0] + previous[4] - point[0], previous[1] + previous[5] - point[1],
+                previous[0] + previous[2] - point[0], previous[1] + previous[3] - point[1]]
+            : [point[0], point[1]];
+        }),
         isOpen: false,
       };
     } else if (selected === state.polygon.points.length - 1) {

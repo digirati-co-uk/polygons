@@ -36,7 +36,11 @@ export const stampFixedSizeShape: ActionIntent = {
 
     let i = 0;
     for (const point of stamp.points) {
-      newPoints.push([x + (point[0] - stampX) / ratio, y + (point[1] - stampY) / ratio]);
+      const px = x + (point[0] - stampX) / ratio;
+      const py = y + (point[1] - stampY) / ratio;
+      newPoints.push(point.length === 6
+        ? [px, py, point[2] / ratio, point[3] / ratio, point[4] / ratio, point[5] / ratio]
+        : [px, py]);
       i++;
     }
 
